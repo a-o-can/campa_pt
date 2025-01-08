@@ -9,6 +9,9 @@ import tensorflow as tf
 from campa.constants import campa_config
 from campa.data._data import MPPData
 
+import torch
+from torch.utils.data import Dataset, DataLoader
+
 
 def create_dataset(params: Mapping[str, Any]) -> None:
     """
@@ -298,3 +301,118 @@ class NNDataset:
 
         dataset = tf.data.Dataset.from_generator(gen, tuple(output_types), tuple(output_shapes))
         return dataset
+
+
+class NNTorchDataset(NNDataset, Dataset):
+    """
+    Dataset for training and evaluation of neural networks with PyTorch.
+
+    A ``NNTorchDataset`` is stored within ``DATA_DIR/dataset_name``.
+    This folder contains `train`/`val`/`test`/`val_img`/`test_img` folders with :class:`MPPData` objects.
+
+    Parameters
+    ----------
+    dataset_name:
+        name of the dataset, relative to ``DATA_DIR``
+    data_config:
+        name of the data config to use, should be registered in ``campa.ini``
+    """
+
+    def __init__(self, dataset_name: str, data_config: Optional[str] = None):
+        super().__init__(dataset_name, data_config)
+
+    
+    def __init__(self, dataset_name: str, data_config: Optional[str] = None):
+        super().__init__(dataset_name, data_config)
+
+    def __len__(self):
+        return len(self.data["train"].mpp)
+
+    def __getitem__(self, idx):
+        x = self.x("train")[idx]
+        y = self.y("train")[idx]
+        return x, y
+
+    def get_torch_dataset(
+        self,
+        split: str = "train",
+        output_channels: Optional[Iterable[str]] = None,
+        is_conditional: bool = False,
+        repeat_y: Union[bool, int] = False,
+        add_c_to_y: bool = False,
+    ) -> Dataset:
+        """
+        PyTorch Dataset of the desired split.
+
+        Parameters
+        ----------
+        split
+            One of `train`, `val`, `test`.
+        output_channels
+            Channels that should be predicted by the neural network.
+            Defaults to all input channels.
+        is_conditional
+            Whether to add condition information to x
+        repeat_y:
+            Match output length to number of losses
+            (otherwise PyTorch will not work, even if its losses that do not need y).
+        add_c_to_y
+            Append condition to y. Needed for adversarial loss.
+        shuffled
+            Shuffle indices before generating data.
+            Will produce same order every time.
+        batch_size
+            Number of samples per batch.
+
+        Returns
+        -------
+        DataLoader
+            The dataset loader.
+        """
+        class CustomDataset(Dataset):
+            def __init__(self, x, y, is_conditional, repeat_y, add_c_to_y):
+                self.x = x
+                self.y = y
+                self.is_conditional = is_conditional
+                self.repeat_y = repeat_y
+                self.add_c_to_y = add_c_to_y
+
+            def __len__(self):
+                return len(self.x[0]) if self.is_conditional else len(self.x)
+
+            def __getitem__(self, idx):
+                if self.is_conditional:
+                    el_x = (self.x[0][idx], self.x[1][idx])
+                else:
+                    el_x = self.x[idx]
+
+                if self.repeat_y is not False:
+                    el_y = tuple(self.y[j][idx] for j in range(len(self.y)))
+                else:
+                    el_y = self.y[idx]
+
+                if self.add_c_to_y:
+                    el_y = (el_y, self.x[1][idx])
+
+                return el_x, el_y
+
+        x = self.x(split, is_conditional)
+        y = self.y(split, output_channels)
+
+        if repeat_y is not False:
+            y = tuple(y for _ in range(repeat_y))
+
+        dataset = CustomDataset(x, y, is_conditional, repeat_y, add_c_to_y)
+        return dataset
+        # return DataLoader(dataset, shuffle=shuffled, batch_size=batch_size)
+
+    def get_torch_dataloader(self,
+        split: str = "train",
+        output_channels: Optional[Iterable[str]] = None,
+        is_conditional: bool = False,
+        repeat_y: Union[bool, int] = False,
+        add_c_to_y: bool = False,
+        shuffled: bool = False,
+        batch_size: int = 32,
+        ) -> DataLoader:
+        return DataLoader(self.get_torch_dataset(split, output_channels, is_conditional, repeat_y, add_c_to_y), shuffle=shuffled, batch_size=batch_size)
