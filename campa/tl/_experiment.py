@@ -9,7 +9,7 @@ import logging
 import pandas as pd
 import tensorflow as tf
 
-from campa.tl import LossEnum, ModelEnum
+from campa.tl import LossEnum, ModelEnum, ModelEnumTorch, LossEnumTorch
 from campa.data import MPPData
 from campa.utils import load_config, merged_config
 from campa.constants import campa_config
@@ -524,3 +524,241 @@ def _prepare_exp_split(exp: Experiment) -> None:
             mpp_params=mpp_params,
             save_keys=[],
         )
+
+
+## PyTorch
+class TorchExperiment(Experiment):
+    """
+    Experiment stored on disk with neural network.
+
+    Initialised with config dictionary with keys:
+
+    - `experiment`: where to save experiment
+
+        - `dir`: experiment folder
+        - `name`: name of the experiment
+        - `save_config`: (bool), whether to save this config in the folder
+
+    - `data`: which dataset to use for training
+
+        - `data_config`: name of the data config to use, should be registered in ``campa.ini``
+        - `dataset_name`: name of the dataset, relative to ``DATA_DIR``
+        - `output_channels`: Channels that should be predicted by the neural network.
+          Defaults to all input channels.
+
+    - `model`: model definition
+
+        - `model_cls`: instance or value of :class:`ModelEnum`
+        - `model_kwargs`: keyword arguments passed to the model class
+        - `init_with_weights`: if true, looks for saved weights in experiment_dir.
+          if a path, loads these weights
+
+    - `training`: training hyper-parameters
+
+        - `learning_rate`: learning rate to use
+        - `epochs`: number of epochs to train
+        - `batch_size`: number of samples per batch
+        - `loss`: mapping of model output names to values of :class:`LossEnum`.
+          Possible names are `decoder` and `latent`.
+        - `metrics`: mapping of model output names to values of :class:`LossEnum`.
+        - `save_model_weights`: (bool) whether or not to save the model.
+        - `save_history`: (bool) save csv with losses and metrics at each epoch.
+        - `overwrite_history`: overwrite existing history csv file. Otherwise concatenate to it.
+
+    - `evaluation`: evaluation on val/test split
+
+        - `split`: `train`, `val`, or `test`
+        - `predict_reps`: (list) model output that should be predicted.
+          Possible values: `decoder`, `latent`.
+        - `img_ids`: number of images to predict, or list of image ids.
+        - `predict_imgs`: (bool) whether to predict reconstructed images.
+        - `predict_cluster_imgs`: (bool) whether to predict clustered images.
+
+    - `cluster`: clustering on val/test split
+
+        - `cluster_name`: name of the clustering, used to save `npy` file.
+        - `cluster_rep`: model output name to use for clustering, or "mpp".
+        - `cluster_method`: `leiden` or `kmeans`.
+        - `leiden_resolution`: resolution parameter for leiden clustering.
+        - `subsample`: None or "subsample", whether or not to subsample data before clustering.
+        - `subsample_kwargs`: passed to :meth:`campa.data.MPPData.subsample`
+          for creating the subsample data for clustering.
+        - `umap`: (bool) predict UMAP of cluster_rep.
+
+    Parameters
+    ----------
+    config
+        Experiment config.
+    """
+
+    # base experiment config
+    config: MutableMapping[str, Any] = {
+        "experiment": {
+            "dir": None,
+            "name": "experiment",
+            "save_config": True,
+        },
+        "data": {
+            "data_config": None,
+            "dataset_name": None,
+            "output_channels": None,
+        },
+        "model": {
+            "model_cls": ModelEnumTorch.BaseAEModelTorch,  # instance or value of ModelEnum
+            "model_kwargs": {},
+            # if true, looks for saved weights in experiment_dir
+            # if a path, loads these weights
+            "init_with_weights": False,
+        },
+        "training": {
+            "learning_rate": 0.001,
+            "epochs": 10,
+            "batch_size": 128,
+            "loss": {"decoder": LossEnumTorch.MSE},  # instance or value of LossEnum
+            "loss_weights": {"decoder": 1},
+            "loss_warmup_to_epoch": {},
+            "metrics": {"decoder": LossEnumTorch.MSE},  # instance or value of LossEnum
+            # saving models
+            "save_model_weights": True,
+            "save_history": True,
+            "overwrite_history": True,
+        },
+        "evaluation": {  # TODO change this to fit to aggregation params
+            "split": "val",
+            "predict_reps": ["latent", "decoder"],
+            "img_ids": 25,
+            "predict_imgs": True,
+        },
+        "cluster": {  # cluster config, also used in this format for whole data clustering
+            "predict_cluster_imgs": True,
+            "cluster_name": "clustering",
+            "cluster_rep": "latent",
+            "cluster_method": "leiden",  # leiden or kmeans
+            "leiden_resolution": 0.8,
+            "subsample": None,  # 'subsample' or 'som'
+            "subsample_kwargs": {},
+            "som_kwargs": {},
+            "umap": True,
+        },
+    }
+
+    def __init__(self, config: Mapping[str, Any]):
+
+        self.config = merged_config(self.config, config)
+        """
+        Experiment config, see :class:`Experiment`.
+        """
+        self.log = logging.getLogger(self.__class__.__name__)
+        self.log.info(f"Setting up experiment {self.dir}/{self.name}")
+        data_config = campa_config.get_data_config(self.config["data"]["data_config"])
+        # load data_params
+        self.data_params = json.load(
+            open(
+                os.path.join(
+                    data_config.DATASET_DIR,
+                    self.config["data"]["dataset_name"],
+                    "params.json",
+                ),
+            )
+        )
+        # create exp_path
+        if self.dir is not None:
+            os.makedirs(self.full_path, exist_ok=True)
+            if self.config["experiment"]["save_config"]:
+                self.log.info(f"Saving config to {self.dir}/{self.name}/config.json")
+                json.dump(
+                    self.config,
+                    open(os.path.join(self.full_path, "config.json"), "w"),
+                    indent=4,
+                )
+        else:
+            self.log.info("exp_dir is None, did not save config")
+
+        # filepath: /home/icb/alioguz.can/projects/campa_pt/campa/tl/_experiment.py
+    def latest_checkpoint(self, path):
+        """
+        Utility function for pytorch because tf.train.latest_checkpoint does not exist.
+        Find the latest checkpoint in the given path.
+        """
+        checkpoints = [f for f in os.listdir(path) if f.endswith('.pt')]
+        if not checkpoints:
+            return None
+        latest_checkpoint = max(checkpoints, key=lambda f: os.path.getctime(os.path.join(path, f)))
+        return os.path.join(path, latest_checkpoint)
+
+    @property
+    def epoch(self) -> int:
+        """
+        Last epoch for which there is a trained model.
+        """
+        weights_path = self.latest_checkpoint(self.full_path)
+        if weights_path is None:
+            return 0
+        # find epoch in weights_path
+        res = re.findall(r"epoch(\d\d\d)", os.path.basename(weights_path))
+        if len(res) == 0:
+            return 0
+        else:
+            return int(res[0])
+        
+
+def run_torch_experiments(exps: Iterable[Experiment], mode: str = "all") -> None:
+    """
+    Execute experiments.
+
+    Runs all given experiments in the given mode.
+    The following modes are available:
+
+    - `train`: train experiments (if trainable)
+    - `evaluate`: predict experiments on val set and cluster results (on val set)
+    - `trainval`: both train and evaluate
+    - `compare`: generate comparative plots of experiments
+    - `all`: trainval and compare
+
+    Parameters
+    ----------
+    exps
+        Experiments to run.
+    mode
+        mode, one of "train", "evaluate", "trainval", "compare", "all".
+    """
+    from campa.tl import Cluster, TorchEstimator, TorchPredictor, ModelComparator
+
+    assert mode in ["train", "evaluate", "trainval", "compare", "all"], f"unknown mode {mode}"
+    exp_names = [exp.name for exp in exps]
+    print(f"Running experiment for {exp_names} with mode {mode}")
+    for exp_name, exp in zip(exp_names, exps):
+        if mode in ("all", "train", "trainval"):
+            if exp.is_trainable:
+                print(f"Training model for {exp_name}")
+                est = TorchEstimator(exp)
+                _ = est.train_model()
+        if mode in ("all", "evaluate", "trainval"):
+            if exp.is_trainable:
+                # evaluate model
+                print(f"Evaluating model for {exp_name}")
+                pred = TorchPredictor(exp)
+                pred.evaluate_model()
+            else:
+                _prepare_exp_split(exp)
+            # cluster model
+            print(f"Clustering results for {exp_name}")
+            cl = Cluster.from_exp_split(exp)
+            cl.create_clustering()
+            # predict cluster for images
+            if exp.config["evaluation"]["predict_cluster_imgs"]:
+                cl.predict_cluster_imgs(exp)
+    # compare models
+    if mode in ("all", "compare"):
+        # assumes that all experiments have the same experiment_dir
+        comp = ModelComparator(exps, save_dir=os.path.join(campa_config.EXPERIMENT_DIR, list(exps)[0].dir))
+        comp.plot_history(values=["val_loss", "val_decoder_loss"])
+        comp.plot_final_score(
+            score="val_decoder_loss",
+            fallback_score="val_loss",
+            save_prefix="decoder_loss_",
+        )
+        comp.plot_per_channel_mse()
+        comp.plot_predicted_images(img_ids=[0, 1, 2, 3, 4], img_size=list(exps)[0].data_params["test_img_size"])
+        comp.plot_cluster_images(img_ids=[0, 1, 2, 3, 4], img_size=list(exps)[0].data_params["test_img_size"])
+        comp.plot_umap()

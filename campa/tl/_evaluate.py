@@ -9,10 +9,12 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 
 from campa.data import MPPData
-from campa.tl._estimator import Estimator
-from campa.tl._experiment import Experiment
+from campa.tl._estimator import Estimator, TorchEstimator
+from campa.tl._experiment import Experiment, TorchExperiment
 from campa.data._conditions import process_condition_desc
 
+import torch
+import torch.nn as nn
 
 class Predictor:
     """
@@ -206,7 +208,7 @@ class ModelComparator:
         Absolute path to directory in which the plots should be saved.
     """
 
-    def __init__(self, exps: Iterable[Experiment], save_dir: Optional[str] = None):
+    def __init__(self, exps: Iterable[Union[Experiment, TorchExperiment]], save_dir: Optional[str] = None):
 
         self.exps = {exp.name: exp for exp in exps}
         self.exp_names: List[str] = list(self.exps.keys())
@@ -246,7 +248,10 @@ class ModelComparator:
         exp_dir
             Experiment dir in which experiments are stored
         """
-        exps = [Experiment.from_dir(os.path.join(exp_dir, exp_name)) for exp_name in exp_names]
+        try:
+            exps = [Experiment.from_dir(os.path.join(exp_dir, exp_name)) for exp_name in exp_names]
+        except:
+            exps = [TorchExperiment.from_dir(os.path.join(exp_dir, exp_name)) for exp_name in exp_names]
         return cls(exps, save_dir=exp_dir)
 
     def _filter_trainable_exps(self, exp_names: Iterable[str]) -> List[str]:
@@ -645,3 +650,81 @@ class ModelComparator:
                     os.path.join(self.save_dir, f"{save_prefix}umap_{exp_name}.png"),
                     dpi=100,
                 )
+
+
+## PyTorch
+class TorchPredictor(Predictor):
+    def __init__(self, exp: TorchExperiment, batch_size: Optional[int] = None):
+        super().__init__(exp, batch_size)
+        self.est = TorchEstimator(exp)
+
+    def get_representation(self, mpp_data: MPPData, rep: str = "latent") -> Any:
+        """
+        Return representation from given mpp_data inputs.
+
+        Representation `input` returns ``mpp_data.mpp``.
+        For representations `latent` and `decoder`, predict the model.
+
+        Parameters
+        ----------
+        mpp_data
+            Data to get representation from.
+        rep
+            Representation, one of: `input`, `latent`, `decoder`.
+
+        Returns
+        -------
+        ``Iterable``
+            Representation.
+        """
+        #  TODO might remove entangled, latent_y in the future (not needed currently)
+        if rep == "input":
+            # return mpp
+            return mpp_data.center_mpp
+        # need to prepare input to model
+        if self.est.model.is_conditional:
+            data: List[torch.Tensor] = [torch.tensor(mpp_data.mpp), torch.tensor(mpp_data.conditions)]
+        else:
+            data: torch.Tensor = torch.tensor(mpp_data.mpp)
+        # get representations
+        if rep == "latent":
+            self.est.model.encoder.eval()
+            with torch.no_grad():
+                return self.est.model.encoder(data).cpu().numpy()
+        elif rep == "entangled":
+            # this is only for cVAE models which have an "entangled" layer in the decoder
+            # create the model for predicting the latent
+            class DecoderToEntangledLatent(nn.Module):
+                def __init__(self, decoder, entangled_latent):
+                    super().__init__()
+                    self.decoder = decoder
+                    self.entangled_latent = entangled_latent
+
+                def forward(self, x):
+                    return self.entangled_latent(self.decoder(x))
+
+            decoder_to_entangled_latent = DecoderToEntangledLatent(self.est.model.decoder, self.est.model.entangled_latent)
+
+            class EncoderToEntangledLatent(nn.Module):
+                def __init__(self, encoder, decoder_to_entangled_latent):
+                    super().__init__()
+                    self.encoder = encoder
+                    self.decoder_to_entangled_latent = decoder_to_entangled_latent
+
+                def forward(self, x, c):
+                    encoded = self.encoder(x)
+                    return self.decoder_to_entangled_latent([encoded, c])
+
+            encoder_to_entangled_latent = EncoderToEntangledLatent(self.est.model.encoder, decoder_to_entangled_latent)
+
+            encoder_to_entangled_latent.eval()
+            with torch.no_grad():
+                return encoder_to_entangled_latent(data[0], data[1]).cpu().numpy()
+        elif rep == "decoder":
+            return self.est.predict_model(data, batch_size=self.batch_size)
+        elif rep == "latent_y":
+            self.est.model.encoder_y.eval()
+            with torch.no_grad():
+                return self.est.model.encoder_y(data).cpu().numpy()
+        else:
+            raise NotImplementedError(rep)

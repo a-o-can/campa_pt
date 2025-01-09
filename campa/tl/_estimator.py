@@ -350,7 +350,7 @@ class AnnealTemperatureTorch:
         print(f"set temperature to {self.temperature.item()}")
         
 
-class PyTorchEstimator(Estimator):
+class TorchEstimator(Estimator):
     def __init__(self, exp):
         super().__init__(exp)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -429,21 +429,32 @@ class PyTorchEstimator(Estimator):
             shuffled=shuffled,
         )
 
+    def latest_checkpoint(self, path):
+        """
+        Utility function for pytorch because tf.train.latest_checkpoint does not exist.
+        Find the latest checkpoint in the given path.
+        """
+        checkpoints = [f for f in os.listdir(path) if f.endswith('.pt')]
+        if not checkpoints:
+            return None
+        latest_checkpoint = max(checkpoints, key=lambda f: os.path.getctime(os.path.join(path, f)))
+        return os.path.join(path, latest_checkpoint)
+    
     def create_model(self):
         ModelClass = ModelEnumTorch(self.config["model"]["model_cls"]).get_cls()
         self.model = ModelClass(**self.config["model"]["model_kwargs"]).to(self.device)
-        ## To be done using maybe pytorchlightning 
-        # weights_path = self.config["model"]["init_with_weights"]
-        # if weights_path is True:
-        #     weights_path = tf.train.latest_checkpoint(self.exp.full_path)
-        #     if weights_path is None:
-        #         self.log.warning(
-        #             f"WARNING: weights_path set to true but no trained model found in {self.exp.full_path}"
-        #         )
-        # if isinstance(weights_path, str):
-        #     self.log.info(f"Initializing model with weights from {weights_path}")
-        #     self.model.load_state_dict(torch.load(weights_path))
-        #     self.epoch = self.exp.epoch
+        # To be done using maybe pytorchlightning 
+        weights_path = self.config["model"]["init_with_weights"]
+        if weights_path is True:
+            weights_path = self.latest_checkpoint(self.exp.full_path)
+            if weights_path is None:
+                self.log.warning(
+                    f"WARNING: weights_path set to true but no trained model found in {self.exp.full_path}"
+                )
+        if isinstance(weights_path, str):
+            self.log.info(f"Initializing model with weights from {weights_path}")
+            self.model.load_state_dict(torch.load(weights_path))
+            self.epoch = self.exp.epoch
 
     def _compile_model(self):
         config = self.config["training"]
