@@ -31,7 +31,7 @@ base_config = {
     },
     "training": {
         "learning_rate": 0.001,
-        "epochs": 10,
+        "epochs": 1,
         "batch_size": 128,
         "loss": {"decoder": LossEnum.SIGMA_MSE, "latent": LossEnum.KL},
         "metrics": {"decoder": LossEnum.MSE_metric, "latent": LossEnum.KL},

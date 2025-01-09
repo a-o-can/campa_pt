@@ -72,7 +72,7 @@ def calculate_sparsity_levels(initial_sparsity, final_sparsity, n_epochs):
     )[:n_epochs]
 
 ## PyTorch
-class KSparse(nn.Module):
+class KSparseTorch(nn.Module):
     """
     K-sparse PyTorch layer.
 
@@ -98,7 +98,7 @@ class KSparse(nn.Module):
     def extra_repr(self):
         return f'k={self.k.item()}'
 
-class UpdateSparsityLevel:
+class UpdateSparsityLevelTorch:
     """Update sparsity level at the beginning of each epoch."""
 
     def __init__(self, model):
@@ -115,7 +115,7 @@ class UpdateSparsityLevel:
         except StopIteration:
             pass
 
-def calculate_sparsity_levels(initial_sparsity, final_sparsity, n_epochs):
+def calculate_sparsity_levels_torch(initial_sparsity, final_sparsity, n_epochs):
     """Calculate sparsity levels per epoch.
 
     # Arguments

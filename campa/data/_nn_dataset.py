@@ -303,7 +303,7 @@ class NNDataset:
         return dataset
 
 
-class NNTorchDataset(NNDataset, Dataset):
+class NNTorchDataset(Dataset):
     """
     Dataset for training and evaluation of neural networks with PyTorch.
 
@@ -317,13 +317,51 @@ class NNTorchDataset(NNDataset, Dataset):
     data_config:
         name of the data config to use, should be registered in ``campa.ini``
     """
-
     def __init__(self, dataset_name: str, data_config: Optional[str] = None):
-        super().__init__(dataset_name, data_config)
+        super().__init__()
+        self.log = logging.getLogger(self.__class__.__name__)
+        if data_config is None:
+            self.data_config_name = "NascentRNA"
+            self.log.warning(f"Using default data_config {self.data_config_name}")
+        else:
+            self.data_config_name = data_config
+        self.data_config = campa_config.get_data_config(self.data_config_name)
+        self.dataset_folder = os.path.join(self.data_config.DATASET_DIR, dataset_name)
 
-    
-    def __init__(self, dataset_name: str, data_config: Optional[str] = None):
-        super().__init__(dataset_name, data_config)
+        # data
+        self.data: Dict[str, MPPData] = {
+            "train": MPPData.from_data_dir(
+                os.path.join(self.dataset_folder, "train"), base_dir="", data_config=self.data_config_name
+            ),
+            "val": MPPData.from_data_dir(
+                os.path.join(self.dataset_folder, "val"), base_dir="", data_config=self.data_config_name
+            ),
+            "test": MPPData.from_data_dir(
+                os.path.join(self.dataset_folder, "test"), base_dir="", data_config=self.data_config_name
+            ),
+        }
+        """
+        Train, val, and test MPPDatas.
+        """
+        self.imgs: Dict[str, MPPData] = {
+            "val": MPPData.from_data_dir(
+                os.path.join(self.dataset_folder, "val_imgs"), base_dir="", data_config=self.data_config_name
+            ),
+            "test": MPPData.from_data_dir(
+                os.path.join(self.dataset_folder, "test_imgs"), base_dir="", data_config=self.data_config_name
+            ),
+        }
+        """
+        Val and test MPPDatas containing entire images for visualisation.
+        """
+        self.channels = self.data["train"].channels.reset_index().set_index("name")
+        self.params = json.load(open(os.path.join(self.dataset_folder, "params.json")))
+
+    def __str__(self):
+        s = f"NNDataset for {self.data_config_name} (shape {self.data['train'].mpp.shape[1:]})."
+        s += f" train: {len(self.data['train'].mpp)}, val: {len(self.data['val'].mpp)},"
+        s += f" test: {len(self.data['test'].mpp)}"
+        return s
 
     def __len__(self):
         return len(self.data["train"].mpp)
@@ -332,6 +370,45 @@ class NNTorchDataset(NNDataset, Dataset):
         x = self.x("train")[idx]
         y = self.y("train")[idx]
         return x, y
+    
+    def x(self, split: str, is_conditional: bool = False) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+        """
+        Neural network inputs.
+
+        Parameters
+        ----------
+        split
+            One of `train`, `val`, `test`.
+        is_conditional
+            Whether to add condition information to x
+        """
+        x = self.data[split].mpp.astype(np.float32)
+        if is_conditional:
+            c = self.data[split].conditions.astype(np.float32)  # type: ignore[union-attr]
+            x = (x, c)  # type: ignore[assignment]
+        if isinstance(x, np.memmap):
+            x = x.transpose(0,3,1,2) # pytorch expects the channel to be the second dimension
+        else: # it is a tuple with x being the 0th and c being the 1st element
+            x = (x[0].transpose(0,3,1,2), x[1]) # recreate because tuples are immutable
+        return x
+
+    def y(self, split: str, output_channels: Optional[Iterable[str]] = None) -> np.ndarray:
+        """
+        Groundtruth outputs.
+
+        Parameters
+        ----------
+        split
+            One of `train`, `val`, `test`.
+        output_channels
+            Channels that should be predicted by the neural network.
+            Defaults to all input channels.
+        """
+        y = self.data[split].center_mpp
+        if output_channels is not None:
+            channel_ids = self.data[split].get_channel_ids(list(output_channels))
+            y = y[:, channel_ids]
+        return y
 
     def get_torch_dataset(
         self,

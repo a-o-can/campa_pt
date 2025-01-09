@@ -14,7 +14,7 @@ import tensorflow as tf
 
 from campa.tl import LossEnum, ModelEnum, LossEnumTorch, ModelEnumTorch
 from campa.data import NNDataset, NNTorchDataset
-from campa.tl._layers import UpdateSparsityLevel
+from campa.tl._layers import UpdateSparsityLevel, UpdateSparsityLevelTorch
 
 import torch
 import torch.nn as nn
@@ -350,9 +350,8 @@ class AnnealTemperatureTorch:
         print(f"set temperature to {self.temperature.item()}")
         
 
-class TorchEstimator(Estimator):
+class TorchEstimator:
     def __init__(self, exp):
-        super().__init__(exp)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.log = logging.getLogger(self.__class__.__name__)
         self.exp = exp
@@ -367,6 +366,7 @@ class TorchEstimator(Estimator):
         self.callbacks: list[object] = []
 
         # create model
+        self.criterion = self.config["training"]["loss"]
         self.optimizer = None
         self.epoch = 0
         self.create_model()
@@ -383,7 +383,7 @@ class TorchEstimator(Estimator):
             self.add_c_to_y = True
             self.repeat_y = self.repeat_y - 1
         self.ds = NNTorchDataset(
-            self.config["data"]["dataset_name"],
+            dataset_name=self.config["data"]["dataset_name"],
             data_config=self.config["data"]["data_config"],
         )
         self._train_dataset, self._val_dataset, self._test_dataset = None, None, None
@@ -466,7 +466,7 @@ class TorchEstimator(Estimator):
                 config["loss_warmup_to_epoch"],
             )
         )
-        self.callbacks.append(UpdateSparsityLevel())
+        self.callbacks.append(UpdateSparsityLevelTorch(self.model))
         if hasattr(self.model, "temperature"):
             self.callbacks.append(
                 AnnealTemperatureTorch(
@@ -478,7 +478,6 @@ class TorchEstimator(Estimator):
             )
         if self.optimizer is None:
             self.optimizer = optim.Adam(self.model.parameters(), lr=config["learning_rate"])
-        self.criterion = {key: LossEnum(val).get_fn() for key, val in config["loss"].items()}
         self.compiled_model = True
 
     def train_model(self):
@@ -489,8 +488,10 @@ class TorchEstimator(Estimator):
             self.epoch = 0
         self.log.info(f"Training model for {config['epochs']} epochs")
         self.model.train()
-        train_loader = DataLoader(self.train_dataset, batch_size=config["batch_size"], shuffle=True)
-        val_loader = DataLoader(self.val_dataset, batch_size=config["batch_size"], shuffle=False)
+        # train_loader = DataLoader(self.train_dataset, batch_size=config["batch_size"], shuffle=True)
+        train_loader = self.ds.get_torch_dataloader("train", batch_size=config["batch_size"], shuffled=True)
+        # val_loader = DataLoader(self.val_dataset, batch_size=config["batch_size"], shuffle=False)
+        val_loader = self.ds.get_torch_dataloader("val", batch_size=config["batch_size"], shuffled=True)
         history = []
         for epoch in range(config["epochs"]):
             epoch_loss = 0

@@ -13,7 +13,7 @@ from campa.tl import LossEnum, ModelEnum, ModelEnumTorch, LossEnumTorch
 from campa.data import MPPData
 from campa.utils import load_config, merged_config
 from campa.constants import campa_config
-
+import pdb
 
 class Experiment:
     """
@@ -614,10 +614,10 @@ class TorchExperiment(Experiment):
             "learning_rate": 0.001,
             "epochs": 10,
             "batch_size": 128,
-            "loss": {"decoder": LossEnumTorch.MSE},  # instance or value of LossEnum
+            "loss": {"decoder": LossEnumTorch.MSE_Torch},  # instance or value of LossEnum
             "loss_weights": {"decoder": 1},
             "loss_warmup_to_epoch": {},
-            "metrics": {"decoder": LossEnumTorch.MSE},  # instance or value of LossEnum
+            "metrics": {"decoder": LossEnumTorch.MSE_Torch},  # instance or value of LossEnum
             # saving models
             "save_model_weights": True,
             "save_history": True,

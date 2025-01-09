@@ -68,7 +68,7 @@ data_params = {
     "subsample": True,
     # kwargs for MPPData.subsample() defining the fraction of pixels to be sampled
     "subsample_kwargs": {
-        "frac": 0.1,
+        "frac": 0.001,
         "frac_per_obj": None,
         "num": None,
         "num_per_obj": None,

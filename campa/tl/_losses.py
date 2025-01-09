@@ -111,6 +111,8 @@ def sigma_vae_mse(y_true, y_pred):
     """
     MSE loss for sigma-VAE (calibrated decoder).
     """
+    print("y_true", y_true.shape)
+    print("y_pred", y_pred.shape)
     log_sigma = tf.math.log(tf.math.sqrt(tf.reduce_mean((y_true - y_pred) ** 2, [0, 1], keepdims=True)))
     return tf.reduce_sum(gaussian_nll(y_pred, log_sigma, y_true))
 
@@ -133,56 +135,56 @@ class LossEnumTorch(str, Enum):
     Possible values are:
 
     - ``LossEnumTorch.MSE``: "mean_squared_error" (:func:`torch.nn.functional.mse_loss`)
-    - ``LossEnumTorch.SIGMA_MSE``: "sigma_vae_mse", MSE loss for sigma VAE
+    - ``LossEnumTorch.SIGMA_MSE``: "sigma_vae_mse_torch", MSE loss for sigma VAE
     - ``LossEnumTorch.KL``: "kl_divergence"
     - ``LossEnumTorch.MSE_METRIC``: "mean_squared_error_metric" (:class:`torch.nn.MSELoss`)
     """
 
-    MSE = "mean_squared_error"
-    KL = "kl_divergence"
-    SIGMA_MSE = "sigma_vae_mse"
-    ENT = "entropy"
-    CAT_KL = "categorical_kl"
-    GMM_KL = "gmm_kl_divergence"
-    SOFTMAX = "softmax"
+    MSE_Torch = "mean_squared_error_torch"
+    KL_Torch = "kl_divergence_torch"
+    SIGMA_MSE_Torch = "sigma_vae_mse_torch"
+    ENT_Torch = "entropy_torch"
+    CAT_KL_Torch = "categorical_kl_torch"
+    GMM_KL_Torch = "gmm_kl_divergence_torch"
+    SOFTMAX_Torch = "softmax_torch"
 
-    MSE_metric = "mean_squared_error_metric"
+    MSE_metric_Torch = "mean_squared_error_metric_torch"
 
-    ACC_metric = "accuracy_metric"
+    ACC_metric_Torch = "accuracy_metric_torch"
 
     def get_fn(self):
         """Return loss function."""
         cls = self.__class__
-        if self == cls.MSE:
+        if self == cls.MSE_Torch:
             return F.mse_loss
-        elif self == cls.KL:
-            return kl_loss
-        elif self == cls.SIGMA_MSE:
-            return sigma_vae_mse
-        elif self == cls.ENT:
-            return min_entropy
-        elif self == cls.CAT_KL:
-            return categorical_kl_loss
-        elif self == cls.GMM_KL:
-            return gmm_kl_loss
-        elif self == cls.SOFTMAX:
+        elif self == cls.KL_Torch:
+            return kl_loss_torch
+        elif self == cls.SIGMA_MSE_Torch:
+            return sigma_vae_mse_torch
+        elif self == cls.ENT_Torch:
+            return min_entropy_torch
+        elif self == cls.CAT_KL_Torch:
+            return categorical_kl_loss_torch
+        elif self == cls.GMM_KL_Torch:
+            return gmm_kl_loss_torch
+        elif self == cls.SOFTMAX_Torch:
             return F.cross_entropy
-        elif self == cls.MSE_metric:
+        elif self == cls.MSE_metric_Torch:
             return torch.nn.MSELoss()
-        elif self == cls.ACC_metric:
+        elif self == cls.ACC_metric_Torch:
             return torch.nn.CrossEntropyLoss()
         else:
             raise NotImplementedError
 
 
-def kl_loss(y_true, y_pred):
+def kl_loss_torch(y_true, y_pred):
     """KL divergence."""
     mean, var = torch.chunk(y_pred, 2, dim=-1)
     l_kl = -0.5 * torch.mean(1 + var - mean.pow(2) - var.exp())
     return l_kl
 
 
-def categorical_kl_loss(y_true, y_pred):
+def categorical_kl_loss_torch(y_true, y_pred):
     """KL loss for categorical VAE."""
     logits_y = y_pred
     q_y = F.softmax(logits_y, dim=-1)
@@ -192,7 +194,7 @@ def categorical_kl_loss(y_true, y_pred):
     return kl
 
 
-def gmm_kl_loss(y_true, y_pred):
+def gmm_kl_loss_torch(y_true, y_pred):
     """KL loss for GMM.
 
     From: https://stats.stackexchange.com/questions/7440/kl-divergence-between-two-univariate-gaussians
@@ -208,7 +210,7 @@ def gmm_kl_loss(y_true, y_pred):
     return kl
 
 
-def gaussian_nll(mu, log_sigma, x):
+def gaussian_nll_torch(mu, log_sigma, x):
     """Gaussian negative log-likelihood.
 
     From: https://github.com/orybkin/sigma-vae-tensorflow/blob/master/model.py
@@ -216,15 +218,15 @@ def gaussian_nll(mu, log_sigma, x):
     return 0.5 * ((x - mu) / log_sigma.exp()) ** 2 + log_sigma + 0.5 * np.log(2 * np.pi)
 
 
-def sigma_vae_mse(y_true, y_pred):
+def sigma_vae_mse_torch(y_true, y_pred):
     """
     MSE loss for sigma-VAE (calibrated decoder).
     """
     log_sigma = torch.log(torch.sqrt(torch.mean((y_true - y_pred) ** 2, dim=[0, 1], keepdim=True)))
-    return torch.sum(gaussian_nll(y_pred, log_sigma, y_true))
+    return torch.sum(gaussian_nll_torch(y_pred, log_sigma, y_true))
 
 
-def min_entropy(y_true, y_pred):
+def min_entropy_torch(y_true, y_pred):
     """
     Entropy.
     """
