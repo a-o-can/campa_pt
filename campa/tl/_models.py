@@ -1048,7 +1048,7 @@ class VAEModelTorch(BaseAEModelTorch):
                 layers.append(nn.Linear(in_channels, fc_layer))
             layers.append(nn.ReLU())
             in_channels = fc_layer
-        latent_layer = nn.Linear(in_channels, self.config["latent_dim"]*2)
+        latent_layer = nn.Linear(in_channels, self.config["latent_dim"] * 2)
         layers.append(latent_layer)
         encoder = nn.Sequential(*layers)
         return encoder, latent_layer
@@ -1076,7 +1076,7 @@ class VAEModelTorch(BaseAEModelTorch):
             adv_output = self.adv_head(reparam_latent)
             return reparam_latent, adv_output
         reparam_latent = self.decoder(reparam_latent)
-        return reparam_latent, x
+        return {"decoder": reparam_latent, "latent":x}
     
 
 class CatVAEModelTorch(BaseAEModelTorch):

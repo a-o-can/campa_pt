@@ -233,7 +233,6 @@ class Estimator:
         if config["overwrite_history"]:
             self.epoch = 0
         self.log.info(f"Training model for {config['epochs']} epochs")
-        # pdb.set_trace()
         history = self.model.model.fit(
             # TODO this is only shuffling the first 10000 samples, but as data is shuffled already should be ok
             x=self.train_dataset.shuffle(10000).batch(config["batch_size"]).prefetch(1),
@@ -496,18 +495,22 @@ class TorchEstimator:
         history = []
         for epoch in range(config["epochs"]):
             epoch_loss = 0
+            epoch_individual_loss = {key: 0 for key in self.criterion}
             for batch in train_loader:
                 self.optimizer.zero_grad()
                 inputs, targets = batch
                 inputs, targets = inputs.to(self.device), targets.to(self.device)
-                outputs = self.model(inputs)
-                loss = sum(self.criterion[key](outputs[0], targets) * self.loss_weights[key] for key in self.criterion)
+                outputs = self.model(inputs) # First output is decoder, second is latent space.
+                losses = {key: self.criterion[key](targets, outputs[key]) for key in self.criterion}
+                loss = sum(losses[key] * self.loss_weights[key] for key in self.criterion)
                 loss.backward()
                 self.optimizer.step()
                 epoch_loss += loss.item()
+                epoch_individual_loss = {key: epoch_individual_loss[key] + losses[key].item() for key in self.criterion}
             val_loss = self.evaluate_model(val_loader)
-            history.append({"epoch": epoch, "loss": epoch_loss, "val_loss": val_loss})
-            self.log.info(f"Epoch {epoch}: loss = {epoch_loss}, val_loss = {val_loss}")
+            history_dict = {"epoch": epoch, "loss": epoch_loss, "val_loss": val_loss}
+            history_dict = history_dict.update(epoch_individual_loss)
+            self.log.info(history_dict)
         self.epoch += config["epochs"]
         if config["save_model_weights"]:
             weights_name = self.weights_name.format(self.epoch)
@@ -532,7 +535,7 @@ class TorchEstimator:
             for batch in data_loader:
                 inputs = batch.to(self.device)
                 outputs = self.model(inputs)
-                predictions.append(outputs[0].cpu().numpy())
+                predictions.append(outputs["decoder"].cpu().numpy())
         return np.concatenate(predictions, axis=0)
 
     def evaluate_model(self, dataset=None):
@@ -548,6 +551,7 @@ class TorchEstimator:
                 inputs, targets = batch
                 inputs, targets = inputs.to(self.device), targets.to(self.device)
                 outputs = self.model(inputs)
-                loss = sum(self.criterion[key](outputs[0], targets) * self.loss_weights[key] for key in self.criterion)
+                losses = {key: self.criterion[key](targets, outputs[key]) for key in self.criterion}
+                loss = sum(losses[key] * self.loss_weights[key] for key in self.criterion)
                 total_loss += loss.item()
         return total_loss / len(data_loader)
