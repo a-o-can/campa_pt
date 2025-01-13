@@ -111,8 +111,6 @@ def sigma_vae_mse(y_true, y_pred):
     """
     MSE loss for sigma-VAE (calibrated decoder).
     """
-    print("y_true", y_true.shape)
-    print("y_pred", y_pred.shape)
     log_sigma = tf.math.log(tf.math.sqrt(tf.reduce_mean((y_true - y_pred) ** 2, [0, 1], keepdims=True)))
     return tf.reduce_sum(gaussian_nll(y_pred, log_sigma, y_true))
 

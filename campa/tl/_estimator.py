@@ -20,6 +20,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
+import numpy as np
+import pdb
 
 
 # --- Callbacks ---
@@ -231,6 +233,7 @@ class Estimator:
         if config["overwrite_history"]:
             self.epoch = 0
         self.log.info(f"Training model for {config['epochs']} epochs")
+        # pdb.set_trace()
         history = self.model.model.fit(
             # TODO this is only shuffling the first 10000 samples, but as data is shuffled already should be ok
             x=self.train_dataset.shuffle(10000).batch(config["batch_size"]).prefetch(1),
@@ -488,10 +491,8 @@ class TorchEstimator:
             self.epoch = 0
         self.log.info(f"Training model for {config['epochs']} epochs")
         self.model.train()
-        # train_loader = DataLoader(self.train_dataset, batch_size=config["batch_size"], shuffle=True)
         train_loader = self.ds.get_torch_dataloader("train", batch_size=config["batch_size"], shuffled=True)
-        # val_loader = DataLoader(self.val_dataset, batch_size=config["batch_size"], shuffle=False)
-        val_loader = self.ds.get_torch_dataloader("val", batch_size=config["batch_size"], shuffled=True)
+        val_loader = self.ds.get_torch_dataloader("val", batch_size=config["batch_size"], shuffled=False)
         history = []
         for epoch in range(config["epochs"]):
             epoch_loss = 0
@@ -500,7 +501,7 @@ class TorchEstimator:
                 inputs, targets = batch
                 inputs, targets = inputs.to(self.device), targets.to(self.device)
                 outputs = self.model(inputs)
-                loss = sum(self.criterion[key](outputs, targets) * self.loss_weights[key] for key in self.criterion)
+                loss = sum(self.criterion[key](outputs[0], targets) * self.loss_weights[key] for key in self.criterion)
                 loss.backward()
                 self.optimizer.step()
                 epoch_loss += loss.item()
@@ -525,26 +526,28 @@ class TorchEstimator:
         if isinstance(data, DataLoader):
             data_loader = data
         else:
-            data_loader = DataLoader(data, batch_size=batch_size or self.config["training"]["batch_size"], shuffle=False)
+            data_loader = DataLoader(data.transpose(0,3,1,2), batch_size=batch_size or self.config["training"]["batch_size"], shuffle=False)
         predictions = []
         with torch.no_grad():
             for batch in data_loader:
                 inputs = batch.to(self.device)
                 outputs = self.model(inputs)
-                predictions.append(outputs.cpu().numpy())
+                predictions.append(outputs[0].cpu().numpy())
         return np.concatenate(predictions, axis=0)
 
     def evaluate_model(self, dataset=None):
         self.model.eval()
         if dataset is None:
             dataset = self.val_dataset
-        data_loader = DataLoader(dataset, batch_size=self.config["training"]["batch_size"], shuffle=False)
+            data_loader = self.ds.get_torch_dataloader("val", batch_size=self.config["training"]["batch_size"], shuffled=False)
+        else:
+            data_loader = dataset
         total_loss = 0
         with torch.no_grad():
             for batch in data_loader:
                 inputs, targets = batch
                 inputs, targets = inputs.to(self.device), targets.to(self.device)
                 outputs = self.model(inputs)
-                loss = sum(self.criterion[key](outputs, targets) * self.loss_weights[key] for key in self.criterion)
+                loss = sum(self.criterion[key](outputs[0], targets) * self.loss_weights[key] for key in self.criterion)
                 total_loss += loss.item()
         return total_loss / len(data_loader)

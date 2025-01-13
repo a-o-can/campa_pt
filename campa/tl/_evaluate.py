@@ -653,10 +653,118 @@ class ModelComparator:
 
 
 ## PyTorch
-class TorchPredictor(Predictor):
+class TorchPredictor:
     def __init__(self, exp: TorchExperiment, batch_size: Optional[int] = None):
-        super().__init__(exp, batch_size)
+        self.log = logging.getLogger(self.__class__.__name__)
+        self.exp = exp.set_to_evaluate()
+        self.log.info(f"Creating Predictor for {self.exp.dir}/{self.exp.name}")
+        # set batch size
+        self.batch_size = batch_size
+        if self.batch_size is None:
+            self.batch_size = self.exp.config["evaluation"].get("batch_size", self.exp.config["training"]["batch_size"])
+
+        # build estimator
         self.est = TorchEstimator(exp)
+
+    def evaluate_model(self):
+        """
+        Predict val/test split and images.
+
+        Uses :meth:`Experiment.evaluate_config` for settings, and calls :meth:`Predictor.predict_split`.
+        """
+        config = self.exp.evaluate_config
+        # predict split
+        self.predict_split(config["split"], reps=config["predict_reps"])
+        if config["predict_imgs"]:
+            self.predict_split(
+                config["split"] + "_imgs",
+                img_ids=config["img_ids"],
+                reps=config["predict_reps"],
+            )
+
+    def predict(
+        self,
+        mpp_data: MPPData,
+        save_dir: Optional[str] = None,
+        reps: Iterable[str] = ("latent",),
+        mpp_params: Optional[Mapping[str, Any]] = None,
+    ) -> MPPData:
+        """
+        Predict representations from ``mpp_data``.
+
+        Parameters
+        ----------
+        mpp_data
+            Data to predict.
+        save_dir
+            Save predicted representations to this dir (absolute path).
+        reps
+            Which representations to predict. See :meth:`Predictor.get_representation`.
+        mpp_params
+            Base data dir and subset information to save alongside of predicted MPPData.
+            See :meth:`MPPData.write`.
+
+        Returns
+        -------
+        :class:`MPPData`
+            Data with representations stored in :meth:`MPPData.data`.
+        """
+        self.log.info(f"Predicting representation {reps} for mpp_data")
+        for rep in reps:
+            mpp_data._data[rep] = self.get_representation(mpp_data, rep=rep)
+        if save_dir is not None:
+            mpp_data.write(save_dir, save_keys=reps, mpp_params=mpp_params)
+        return mpp_data
+
+    def predict_split(
+        self,
+        split: str,
+        img_ids: Optional[Union[np.ndarray, List[int], int]] = None,
+        reps: Iterable[str] = ("latent", "decoder"),
+        **kwargs: Any,
+    ) -> None:
+        """
+        Predict data from train/val/test split of dataset that the model was trained with.
+
+        Saves results in ``experiment_dir/exp_name/split``.
+
+        Parameters
+        ----------
+        split
+            Data split to predict. One of `train`, `val`, `test`, `val_imgs`, `test_imgs`.
+        img_ids
+            Object ids or number of objects that should be predicted (only for ``val_imgs`` and ``test_imgs``).
+        reps
+            Representations to predict. See :meth:`Predictor.get_representation`.
+        """
+        self.log.info(f"Predicting split {split} for {self.exp.dir}/{self.exp.name}")
+        if "_imgs" in split:
+            mpp_data = self.est.ds.imgs[split.replace("_imgs", "")]
+            if img_ids is None:
+                img_ids = list(mpp_data.unique_obj_ids)
+            if isinstance(img_ids, int):
+                # choose random img_ids from available ones
+                # TODO this uses new rng, before used old default np.random.choice. Will choose different cells
+                rng = np.random.default_rng(seed=42)
+                img_ids = rng.choice(mpp_data.unique_obj_ids, img_ids, replace=False)
+            # subset mpp_data to these img_ids
+            mpp_data.subset(obj_ids=img_ids)  # type: ignore[arg-type]
+            # add neighborhood to mpp_data (other processing is already done)
+            if self.est.ds.params["neighborhood"]:
+                mpp_data.add_neighborhood(size=self.est.ds.params["neighborhood_size"])
+        else:
+            mpp_data = self.est.ds.data[split]
+
+        for rep in reps:
+            mpp_data._data[rep] = self.get_representation(mpp_data, rep=rep)
+        save_dir = os.path.join(self.exp.full_path, f"results_epoch{self.est.epoch:03d}", split)
+        # base data dir for correct recreation of mpp_data
+        base_data_dir = os.path.join("datasets", self.est.ds.params["dataset_name"], split)
+        mpp_data.write(
+            save_dir,
+            save_keys=reps,
+            mpp_params={"base_data_dir": base_data_dir, "subset": True},
+        )
 
     def get_representation(self, mpp_data: MPPData, rep: str = "latent") -> Any:
         """
@@ -683,48 +791,29 @@ class TorchPredictor(Predictor):
             return mpp_data.center_mpp
         # need to prepare input to model
         if self.est.model.is_conditional:
-            data: List[torch.Tensor] = [torch.tensor(mpp_data.mpp), torch.tensor(mpp_data.conditions)]
+            data: List[np.ndarray] = [mpp_data.mpp, mpp_data.conditions]  # type: ignore[list-item]
         else:
-            data: torch.Tensor = torch.tensor(mpp_data.mpp)
+            data: np.ndarray = mpp_data.mpp  # type: ignore[no-redef]
         # get representations
         if rep == "latent":
-            self.est.model.encoder.eval()
-            with torch.no_grad():
-                return self.est.model.encoder(data).cpu().numpy()
+            return self.est.model.encoder(torch.tensor(data.transpose(0,3,1,2))) # because mpp has shape batch_size x neighbors x neighbors x channels
         elif rep == "entangled":
             # this is only for cVAE models which have an "entangled" layer in the decoder
             # create the model for predicting the latent
-            class DecoderToEntangledLatent(nn.Module):
-                def __init__(self, decoder, entangled_latent):
-                    super().__init__()
-                    self.decoder = decoder
-                    self.entangled_latent = entangled_latent
-
-                def forward(self, x):
-                    return self.entangled_latent(self.decoder(x))
-
-            decoder_to_entangled_latent = DecoderToEntangledLatent(self.est.model.decoder, self.est.model.entangled_latent)
-
-            class EncoderToEntangledLatent(nn.Module):
-                def __init__(self, encoder, decoder_to_entangled_latent):
-                    super().__init__()
-                    self.encoder = encoder
-                    self.decoder_to_entangled_latent = decoder_to_entangled_latent
-
-                def forward(self, x, c):
-                    encoded = self.encoder(x)
-                    return self.decoder_to_entangled_latent([encoded, c])
-
-            encoder_to_entangled_latent = EncoderToEntangledLatent(self.est.model.encoder, decoder_to_entangled_latent)
-
-            encoder_to_entangled_latent.eval()
-            with torch.no_grad():
-                return encoder_to_entangled_latent(data[0], data[1]).cpu().numpy()
+            decoder_to_entangled_latent = tf.keras.Model(self.est.model.decoder.input, self.est.model.entangled_latent)
+            encoder_to_entangled_latent = tf.keras.Model(
+                self.est.model.input,
+                decoder_to_entangled_latent(
+                    [
+                        self.est.model.encoder(self.est.model.input),
+                        self.est.model.input[1],
+                    ]
+                ),
+            )
+            return encoder_to_entangled_latent.predict(data, batch_size=self.batch_size)
         elif rep == "decoder":
             return self.est.predict_model(data, batch_size=self.batch_size)
         elif rep == "latent_y":
-            self.est.model.encoder_y.eval()
-            with torch.no_grad():
-                return self.est.model.encoder_y(data).cpu().numpy()
+            return self.est.model.encoder_y.predict(data, batch_size=self.batch_size)
         else:
             raise NotImplementedError(rep)

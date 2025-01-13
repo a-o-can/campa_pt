@@ -141,3 +141,4 @@ docs/source/classes
 tests/_data
 tests/_experiments
 tests/_test_data.zip
+tensorflow/*

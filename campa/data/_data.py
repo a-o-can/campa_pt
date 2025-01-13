@@ -435,7 +435,11 @@ class MPPData:
         save_keys = list(set(save_keys).union(["x", "y", "obj_ids"]))
         self.log.info(f"Saving mpp data to {save_dir} (keys: {save_keys})")
         for key in save_keys:
-            np.save(os.path.join(save_dir, f"{key}.npy"), np.array(self._data[key]))
+            if isinstance(self._data[key], np.ndarray):
+                np.save(os.path.join(save_dir, f"{key}.npy"), self._data[key])
+            else:
+                self._data[key] = self._data[key].detach().cpu().numpy()
+                np.save(os.path.join(save_dir, f"{key}.npy"), self._data[key])
         self.channels.to_csv(os.path.join(save_dir, "channels.csv"), header=None)
         self.metadata.to_csv(os.path.join(save_dir, "metadata.csv"))
 

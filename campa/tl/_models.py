@@ -1004,6 +1004,9 @@ class BaseAEModelTorch(nn.Module):
             return x, adv_output
         return x
     
+    def total_trainable_params(self):
+        print(sum(p.numel() for p in self.parameters() if p.requires_grad))
+
 
 class VAEModelTorch(BaseAEModelTorch):
     """
@@ -1045,7 +1048,7 @@ class VAEModelTorch(BaseAEModelTorch):
                 layers.append(nn.Linear(in_channels, fc_layer))
             layers.append(nn.ReLU())
             in_channels = fc_layer
-        latent_layer = nn.Linear(in_channels, self.config["latent_dim"])
+        latent_layer = nn.Linear(in_channels, self.config["latent_dim"]*2)
         layers.append(latent_layer)
         encoder = nn.Sequential(*layers)
         return encoder, latent_layer
@@ -1072,7 +1075,7 @@ class VAEModelTorch(BaseAEModelTorch):
         if self.is_adversarial:
             adv_output = self.adv_head(reparam_latent)
             return reparam_latent, adv_output
-        x = self.decoder(x)
+        reparam_latent = self.decoder(reparam_latent)
         return reparam_latent, x
     
 

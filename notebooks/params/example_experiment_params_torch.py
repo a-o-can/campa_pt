@@ -1,4 +1,4 @@
-from campa.tl import LossEnum, ModelEnum, LossEnumTorch, ModelEnumTorch
+from campa.tl import LossEnumTorch, ModelEnumTorch
 
 base_config = {
     "experiment": {
@@ -34,6 +34,7 @@ base_config = {
         "epochs": 1,
         "batch_size": 128,
         "loss": {"decoder": LossEnumTorch.SIGMA_MSE_Torch, "latent": LossEnumTorch.KL_Torch},
+        "loss_weights": {"decoder": 1, "latent": 1},
         "metrics": {"decoder": LossEnumTorch.MSE_metric_Torch, "latent": LossEnumTorch.KL_Torch},
         # saving models
         "save_model_weights": True,
