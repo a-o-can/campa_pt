@@ -21,7 +21,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
-import pdb
+from tqdm import tqdm
 
 
 # --- Callbacks ---
@@ -493,31 +493,36 @@ class TorchEstimator:
         train_loader = self.ds.get_torch_dataloader("train", batch_size=config["batch_size"], shuffled=True)
         val_loader = self.ds.get_torch_dataloader("val", batch_size=config["batch_size"], shuffled=False)
         history = []
-        for epoch in range(config["epochs"]):
+        for epoch in tqdm(range(config["epochs"]), desc="Epochs"):
             epoch_loss = 0
-            epoch_individual_loss = {key: 0 for key in self.criterion}
-            for batch in train_loader:
+            epoch_individual_loss = {key+"_loss": 0 for key in self.criterion}
+            n_batch = 0
+            for batch in tqdm(train_loader, desc="Batches", leave=False):
                 self.optimizer.zero_grad()
                 inputs, targets = batch
                 inputs, targets = inputs.to(self.device), targets.to(self.device)
-                outputs = self.model(inputs) # First output is decoder, second is latent space.
+                outputs = self.model(inputs)
                 losses = {key: self.criterion[key](targets, outputs[key]) for key in self.criterion}
                 loss = sum(losses[key] * self.loss_weights[key] for key in self.criterion)
                 loss.backward()
                 self.optimizer.step()
                 epoch_loss += loss.item()
-                epoch_individual_loss = {key: epoch_individual_loss[key] + losses[key].item() for key in self.criterion}
+
+                epoch_individual_loss = {key+"_loss": epoch_individual_loss[key+"_loss"] + losses[key].item() for key in self.criterion}
+                n_batch += 1
+            epoch_loss = epoch_loss/n_batch
+            epoch_individual_loss = {key: value / n_batch for key, value in epoch_individual_loss.items()}
             val_loss = self.evaluate_model(val_loader)
-            history_dict = {"epoch": epoch, "loss": epoch_loss, "val_loss": val_loss}
-            history_dict = history_dict.update(epoch_individual_loss)
-            self.log.info(history_dict)
+            history = {"epoch": epoch, "loss": epoch_loss, "val_loss": val_loss}
+            history.update(epoch_individual_loss)
+            self.log.info(history)
         self.epoch += config["epochs"]
         if config["save_model_weights"]:
             weights_name = self.weights_name.format(self.epoch)
             self.log.info(f"Saving model to {weights_name}")
             torch.save(self.model.state_dict(), weights_name)
         if config["save_history"]:
-            history_df = pd.DataFrame(history)
+            history_df = pd.DataFrame([history])
             if os.path.exists(self.history_name) and not config["overwrite_history"]:
                 prev_history = pd.read_csv(self.history_name, index_col=0)
                 history_df = pd.concat([prev_history, history_df])
