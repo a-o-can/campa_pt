@@ -913,11 +913,11 @@ class BaseAEModelTorch(nn.Module):
         self.log.debug(f"Creating model with config: {json.dumps(self.config, indent=4)}")
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        self.encoder_input = nn.ModuleList()
-        self.decoder_input = nn.ModuleList()
-        if self.is_conditional:
-            self.encoder_input.append(nn.Linear(self.config["num_conditions"], self.config["num_conditions"]))
-            self.decoder_input.append(nn.Linear(self.config["num_conditions"], self.config["num_conditions"]))
+        # self.encoder_input = nn.ModuleList()
+        # self.decoder_input = nn.ModuleList()
+        # if self.is_conditional:
+            # self.encoder_input.append(nn.Linear(self.config["num_conditions"], self.config["num_conditions"]))
+            # self.decoder_input.append(nn.Linear(self.config["num_conditions"], self.config["num_conditions"]))
 
         self.encoder, self.latent = self.create_encoder()
         self.decoder = self.create_decoder()
@@ -926,7 +926,11 @@ class BaseAEModelTorch(nn.Module):
 
     def _create_base_encoder(self):
         layers = []
-        in_channels = self.config["num_channels"]
+        if self.is_conditional:
+            C = self.encode_condition(encoding_level="encoder")
+            in_channels = self.config["num_channels"] + self.config["encode_condition"][-1]
+        else:
+            in_channels = self.config["num_channels"]
         for out_channels, kernel_size in zip(self.config["encoder_conv_layers"], self.config["encoder_conv_kernel_size"]):
             layers.append(nn.Conv2d(in_channels, out_channels, kernel_size))
             layers.append(nn.ReLU())
@@ -956,7 +960,7 @@ class BaseAEModelTorch(nn.Module):
             layers.append(nn.Linear(fc_layer, in_features))
             layers.append(nn.ReLU())
             in_features = fc_layer
-        layers.append(nn.Linear(self.config["num_output_channels"], in_features))
+        layers.append(nn.Linear(in_features, self.config["num_output_channels"]))
         decoder = nn.Sequential(*layers)
         return decoder
 
@@ -972,9 +976,9 @@ class BaseAEModelTorch(nn.Module):
         adv_head = nn.Sequential(*layers)
         return adv_head
 
-    def encode_condition(self, C):
+    def encode_condition(self, encoding_level="encoder"):
         if self.config["encode_condition"] is None:
-            return C
+            return nn.Identity()
         if not hasattr(self, "condition_encoder"):
             enc_l = self.config["encode_condition"]
             if isinstance(enc_l, int):
@@ -985,8 +989,13 @@ class BaseAEModelTorch(nn.Module):
                 layers.append(nn.Linear(in_features, layer))
                 layers.append(nn.ReLU())
                 in_features = layer
-            self.condition_encoder = nn.Sequential(*layers)
-        return self.condition_encoder(C)
+            condition_encoder = nn.Sequential(*layers)
+        if encoding_level == "encoder":
+            self.condition_encoder_latent = condition_encoder
+            return self.condition_encoder_latent
+        elif encoding_level == "decoder":
+            self.condition_encoder_decoder = condition_encoder
+            return self.condition_encoder_decoder
 
     def add_noise(self, X):
         if self.config["input_noise"] == "dropout":
@@ -1048,28 +1057,32 @@ class VAEModelTorch(BaseAEModelTorch):
         return encoder, latent
     
     def create_decoder(self):
+        if self.is_conditional:
+            C = self.encode_condition(encoding_level="decoder")
+            in_features = self.config["latent_dim"] + self.config["encode_condition"][-1]
+        else:
+            in_features = self.config["latent_dim"]
         layers = []
-        in_features = self.config["latent_dim"]
         for fc_layer in self.config["decoder_fc_layers"]:
-            layers.append(nn.Linear(in_features, fc_layer))
+            layers.append(nn.Linear(fc_layer, in_features))
             layers.append(nn.ReLU())
             in_features = fc_layer
-        if not self.config["decoder_fc_layers"]: # if empty
-            layers.append(nn.Linear(self.config["latent_dim"], self.config["num_output_channels"]))
-        else:
-            layers.append(nn.Linear(in_features, self.config["num_output_channels"]))
-        self.decoder = nn.Sequential(*layers)
-        return self.decoder
+        layers.append(nn.Linear(in_features, self.config["num_output_channels"]))
+        decoder = nn.Sequential(*layers)
+        return decoder
 
     def forward(self, x, c=None):
         if self.is_conditional:
-            x = torch.cat([x, c], dim=-1)
+            cond = self.condition_encoder_latent(c)[:, :, None, None].expand(-1,-1,3,3)
+            x = torch.cat([x, cond], dim=1) # dim=1 is the channel dimension.
         x = self.encoder(x)
         latent = self.latent(x)
         reparam_latent = reparameterize_gaussian_torch(latent)
         if self.is_adversarial:
             adv_output = self.adv_head(reparam_latent)
             return reparam_latent, adv_output
+        if self.is_conditional:
+            reparam_latent = torch.cat([reparam_latent, self.condition_encoder_decoder(c)], dim=1) # dim=1 is the channel dimension.
         reparam_latent = self.decoder(reparam_latent)
         return {"decoder": reparam_latent, "latent":x}
     
