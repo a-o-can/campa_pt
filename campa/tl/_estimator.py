@@ -517,7 +517,6 @@ class TorchEstimator:
                 loss.backward()
                 self.optimizer.step()
                 epoch_loss += loss.item()
-
                 epoch_individual_loss = {key+"_loss": epoch_individual_loss[key+"_loss"] + losses[key].item() for key in self.criterion}
                 n_batch += 1
             epoch_loss = epoch_loss/n_batch
