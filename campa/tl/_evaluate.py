@@ -796,24 +796,30 @@ class TorchPredictor:
             data: np.ndarray = mpp_data.mpp  # type: ignore[no-redef]
         # get representations
         if rep == "latent":
-            return self.est.model.encoder(torch.tensor(data.transpose(0,3,1,2))) # because mpp has shape batch_size x neighbors x neighbors x channels
-        elif rep == "entangled":
-            # this is only for cVAE models which have an "entangled" layer in the decoder
-            # create the model for predicting the latent
-            decoder_to_entangled_latent = tf.keras.Model(self.est.model.decoder.input, self.est.model.entangled_latent)
-            encoder_to_entangled_latent = tf.keras.Model(
-                self.est.model.input,
-                decoder_to_entangled_latent(
-                    [
-                        self.est.model.encoder(self.est.model.input),
-                        self.est.model.input[1],
-                    ]
-                ),
-            )
-            return encoder_to_entangled_latent.predict(data, batch_size=self.batch_size)
+            if not self.est.model.is_conditional:
+                return self.est.model.encoder(torch.tensor(data.transpose(0,3,1,2))) # because mpp has shape batch_size x neighbors x neighbors x channels
+            else:
+                x = torch.tensor(data[0].transpose(0,3,1,2), dtype=self.est.model.condition_encoder_latent[0].bias.dtype)
+                c = self.est.model.condition_encoder_latent(torch.tensor(data[1], dtype=self.est.model.condition_encoder_latent[0].bias.dtype))[:, :, None, None].expand(-1,-1,3,3)
+                x = torch.cat([x, c], dim=1) # dim=1 is the channel dimension.
+                return self.est.model.encoder(torch.tensor(x)) # because mpp has shape batch_size x neighbors x neighbors x channels
+        # elif rep == "entangled":
+        #     # this is only for cVAE models which have an "entangled" layer in the decoder
+        #     # create the model for predicting the latent
+        #     decoder_to_entangled_latent = tf.keras.Model(self.est.model.decoder.input, self.est.model.entangled_latent)
+        #     encoder_to_entangled_latent = tf.keras.Model(
+        #         self.est.model.input,
+        #         decoder_to_entangled_latent(
+        #             [
+        #                 self.est.model.encoder(self.est.model.input),
+        #                 self.est.model.input[1],
+        #             ]
+        #         ),
+        #     )
+        #     return encoder_to_entangled_latent.predict(data, batch_size=self.batch_size)
         elif rep == "decoder":
             return self.est.predict_model(data, batch_size=self.batch_size)
-        elif rep == "latent_y":
-            return self.est.model.encoder_y.predict(data, batch_size=self.batch_size)
+        # elif rep == "latent_y":
+        #     return self.est.model.encoder_y.predict(data, batch_size=self.batch_size)
         else:
             raise NotImplementedError(rep)
