@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 from campa.data import MPPData
 from campa.utils import merged_config
 from campa.constants import campa_config
-from campa.tl._evaluate import Predictor
+from campa.tl._evaluate import Predictor, TorchPredictor
 
 
 # annotation fns
@@ -444,7 +444,8 @@ class Cluster:
         # add colors
         if colors is None:
             # get unique values, removing nan and empty string
-            values = list(np.unique(annotation[from_col].dropna()))
+            tmp = annotation[from_col].dropna().values
+            values = list(np.unique(tmp[tmp.astype(bool)]))
             if "" in values:
                 values.remove("")
             N = len(values)
@@ -564,7 +565,10 @@ class Cluster:
         if self.cluster_mpp.data(self.config["cluster_rep"]) is not None:
             self.log.info(f"cluster_mpp already contains key {self.config['cluster_rep']}. Not recalculating.")
             return
-        pred = Predictor(exp)
+        if exp.config["package"] == "torch":
+            pred = TorchPredictor(exp)
+        else:
+            pred = Predictor(exp)
         cluster_rep = pred.get_representation(self.cluster_mpp, rep=self.config["cluster_rep"])
         self.cluster_mpp._data[self.config["cluster_rep"]] = cluster_rep
         # save cluster_rep
@@ -727,7 +731,10 @@ class Cluster:
         """
         if exp.is_trainable:
             # create Predictor
-            pred = Predictor(exp)
+            if exp.config["package"] == "torch":
+                pred = TorchPredictor(exp)
+            else:
+                pred = Predictor(exp)
             # predict clustering on imgs
             img_save_dir = os.path.join(
                 exp.full_path,
@@ -968,7 +975,10 @@ def prepare_full_dataset(
                 mpp_data.add_neighborhood(exp.data_params["neighborhood_size"])
             # predict rep
             log.info("Predicting latent")
-            pred = Predictor(exp)
+            if exp.config["package"] == "torch":
+                pred = TorchPredictor(exp)
+            else:
+                pred = Predictor(exp)
             pred.predict(
                 mpp_data,
                 reps=[exp.config["cluster"]["cluster_rep"]],
