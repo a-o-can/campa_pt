@@ -1073,6 +1073,7 @@ class VAEModelTorch(BaseAEModelTorch):
 
     def forward(self, x, c=None):
         if self.is_conditional:
+            assert c!=None, "Cannot be None, must be a tensor"
             cond = self.condition_encoder_latent(c)[:, :, None, None].expand(-1,-1,3,3)
             x = torch.cat([x, cond], dim=1) # dim=1 is the channel dimension.
         x = self.encoder(x)
