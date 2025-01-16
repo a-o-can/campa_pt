@@ -482,6 +482,18 @@ class TorchEstimator:
             self.optimizer = optim.Adam(self.model.parameters(), lr=config["learning_rate"])
         self.compiled_model = True
 
+    def inference(self, batch):
+        if self.model.is_conditional:
+            inputs, targets = batch
+            inputs, conditions = inputs
+            inputs, conditions, targets = inputs.to(self.device), conditions.to(self.device), targets.to(self.device)
+        else:
+            inputs, targets = batch
+            inputs, targets = inputs.to(self.device), targets.to(self.device)
+            conditions=None
+        outputs = self.model(inputs, conditions)
+        return outputs, targets
+
     def train_model(self):
         config = self.config["training"]
         if not self.compiled_model:
@@ -490,8 +502,8 @@ class TorchEstimator:
             self.epoch = 0
         self.log.info(f"Training model for {config['epochs']} epochs")
         self.model.train()
-        train_loader = self.ds.get_torch_dataloader("train", batch_size=config["batch_size"], shuffled=True)
-        val_loader = self.ds.get_torch_dataloader("val", batch_size=config["batch_size"], shuffled=False)
+        train_loader = self.ds.get_torch_dataloader("train", batch_size=config["batch_size"], shuffled=True, is_conditional=self.model.is_conditional)
+        val_loader = self.ds.get_torch_dataloader("val", batch_size=config["batch_size"], shuffled=False, is_conditional=self.model.is_conditional)
         history = []
         for epoch in tqdm(range(config["epochs"]), desc="Epochs"):
             epoch_loss = 0
@@ -499,9 +511,7 @@ class TorchEstimator:
             n_batch = 0
             for batch in tqdm(train_loader, desc="Batches", leave=False):
                 self.optimizer.zero_grad()
-                inputs, targets = batch
-                inputs, targets = inputs.to(self.device), targets.to(self.device)
-                outputs = self.model(inputs)
+                outputs, targets = self.inference(batch=batch)
                 losses = {key: self.criterion[key](targets, outputs[key]) for key in self.criterion}
                 loss = sum(losses[key] * self.loss_weights[key] for key in self.criterion)
                 loss.backward()
@@ -532,13 +542,15 @@ class TorchEstimator:
         self.model.eval()
         if isinstance(data, DataLoader):
             data_loader = data
-        else:
-            data_loader = DataLoader(data.transpose(0,3,1,2), batch_size=batch_size or self.config["training"]["batch_size"], shuffle=False)
+        # else:
+        #     if self.model.is_conditional:
+                
+        #     else:
+        #         data_loader = DataLoader(data.transpose(0,3,1,2), batch_size=batch_size or self.config["training"]["batch_size"], shuffle=False)
         predictions = []
         with torch.no_grad():
             for batch in data_loader:
-                inputs = batch.to(self.device)
-                outputs = self.model(inputs)
+                outputs, targets = self.inference(batch)
                 predictions.append(outputs["decoder"].cpu().numpy())
         return np.concatenate(predictions, axis=0)
 
@@ -552,9 +564,7 @@ class TorchEstimator:
         total_loss = 0
         with torch.no_grad():
             for batch in data_loader:
-                inputs, targets = batch
-                inputs, targets = inputs.to(self.device), targets.to(self.device)
-                outputs = self.model(inputs)
+                outputs, targets = self.inference(batch=batch)
                 losses = {key: self.criterion[key](targets, outputs[key]) for key in self.criterion}
                 loss = sum(losses[key] * self.loss_weights[key] for key in self.criterion)
                 total_loss += loss.item()
