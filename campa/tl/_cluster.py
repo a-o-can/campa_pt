@@ -598,7 +598,10 @@ class Cluster:
             sc.tl.leiden(
                 adata,
                 resolution=self.config["leiden_resolution"],
-                key_added="clustering",
+                key_added="clustering", 
+                flavor="igraph", 
+                n_iterations=2,
+                directed=False
             )
             self.cluster_mpp._data[self.config["cluster_name"]] = np.array(adata.obs["clustering"])
             if self.config["umap"]:
