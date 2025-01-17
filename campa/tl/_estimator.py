@@ -537,22 +537,42 @@ class TorchEstimator:
                 history_df = pd.concat([prev_history, history_df])
             history_df.to_csv(self.history_name)
         return history
+    
+    def predict_model(self, data) -> Any:
+        """
+        Predict all elements in ``data``.
 
-    def predict_model(self, data, batch_size=None):
-        self.model.eval()
-        if isinstance(data, DataLoader):
-            data_loader = data
-        # else:
-        #     if self.model.is_conditional:
-                
-        #     else:
-        #         data_loader = DataLoader(data.transpose(0,3,1,2), batch_size=batch_size or self.config["training"]["batch_size"], shuffle=False)
-        predictions = []
-        with torch.no_grad():
-            for batch in data_loader:
-                outputs, targets = self.inference(batch)
-                predictions.append(outputs["decoder"].cpu().numpy())
-        return np.concatenate(predictions, axis=0)
+        Parameters
+        ----------
+        data
+            Data to predict, with first dimension the number of elements.
+
+        Returns
+        -------
+        ``Iterable``
+            prediction
+        """
+        if isinstance(data, NNDataset):
+            inputs, targets = next(iter(data))
+            if self.model.is_conditional:
+                x, c = inputs
+            else:
+                c = None
+                x = inputs
+            x = torch.tensor(x.transpose(0,3,1,2))
+            c = torch.tensor(c)
+        else:
+            if self.model.is_conditional:
+                x = torch.tensor(data[0].transpose(0,3,1,2), dtype=torch.float)
+                c = torch.tensor(data[1], dtype=torch.float)
+            else:
+                x = torch.tensor(data.transpose(0,3,1,2), dtype=torch.float)
+                c = None
+        pred = self.model(x=x, c=c)["decoder"]
+        if isinstance(pred, list) or isinstance(pred, torch.Tensor):
+            # multiple output model, but only care about first output
+            pred = pred[0]
+        return pred
 
     def evaluate_model(self, dataset=None):
         self.model.eval()

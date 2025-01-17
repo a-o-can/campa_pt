@@ -818,7 +818,7 @@ class TorchPredictor:
         #     )
         #     return encoder_to_entangled_latent.predict(data, batch_size=self.batch_size)
         elif rep == "decoder":
-            return self.est.predict_model(data, batch_size=self.batch_size)
+            return self.est.predict_model(data)
         # elif rep == "latent_y":
         #     return self.est.model.encoder_y.predict(data, batch_size=self.batch_size)
         else:

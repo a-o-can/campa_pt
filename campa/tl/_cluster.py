@@ -599,6 +599,7 @@ class Cluster:
             # leiden clustering
             adata = self.cluster_mpp.get_adata(X=self.config["cluster_rep"])
             sc.pp.neighbors(adata)
+            # print(adata)
             sc.tl.leiden(
                 adata,
                 resolution=self.config["leiden_resolution"],
@@ -618,7 +619,8 @@ class Cluster:
             from sklearn.cluster import KMeans
 
             est = KMeans(n_clusters=self.config["kmeans_n"], random_state=0)
-            kmeans = est.fit(self.cluster_mpp.data(self.config["cluster_rep"])).labels_
+            cluster_rep = self.cluster_mpp.get_adata(X=self.config["cluster_rep"]).X
+            kmeans = est.fit(cluster_rep).labels_ # used to be self.cluster_mpp.data(self.config["cluster_rep"])
             # TODO: cast kmeans to str?
             self.cluster_mpp._data[self.config["cluster_name"]] = kmeans
         else:
@@ -717,6 +719,7 @@ class Cluster:
 
         # save
         if save_dir is not None:
+            print(mpp_data)
             mpp_data.write(save_dir, save_keys=[self.config["cluster_name"]])
         return mpp_data
 
