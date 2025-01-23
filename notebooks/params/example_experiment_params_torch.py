@@ -1,8 +1,9 @@
 from campa.tl import LossEnumTorch, ModelEnumTorch
 
 base_config = {
+    "package": "torch", # torch or tensorflow
     "experiment": {
-        "dir": "test",
+        "dir": "torch_test",
         "name": None,
         "save_config": True,
     },
@@ -51,7 +52,7 @@ base_config = {
     "cluster": {  # cluster config, also used in this format for whole data clustering
         "cluster_name": "clustering",
         "cluster_rep": "latent",
-        "cluster_method": "leiden",  # leiden or kmeans
+        "cluster_method": "kmeans",  # leiden or kmeans
         "leiden_resolution": 0.2,
         "subsample": None,  # 'subsample' or 'som'
         "subsample_kwargs": {},

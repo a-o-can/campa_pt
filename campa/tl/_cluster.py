@@ -444,10 +444,11 @@ class Cluster:
         # add colors
         if colors is None:
             # get unique values, removing nan and empty string
-            tmp = annotation[from_col].dropna().values
-            values = list(np.unique(tmp[tmp.astype(bool)]))
+            values = list(annotation[from_col].dropna().values)
+            # values = list(np.unique(annotation[from_col].dropna()))
             if "" in values:
                 values.remove("")
+            values = np.unique(values)
             N = len(values)
             cmap = plt.get_cmap("tab20", N)
             colors = {k: rgb2hex(cmap(i)) for i, k in enumerate(values)}

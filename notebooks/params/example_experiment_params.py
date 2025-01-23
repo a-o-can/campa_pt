@@ -1,8 +1,9 @@
 from campa.tl import LossEnum, ModelEnum
 
 base_config = {
+    "package": "tensorflow", # torch or tensorflow
     "experiment": {
-        "dir": "test",
+        "dir": "tf_test",
         "name": None,
         "save_config": True,
     },

@@ -49,7 +49,8 @@ def annotate_img(
         to_value = row[to_col]
         if color:
             to_value = hex2rgb(to_value)
-        res[img == row[from_col]] = to_value
+        cluster_idx = row[from_col]
+        res[img == cluster_idx] = to_value
     return res.squeeze() if color else res
 
 

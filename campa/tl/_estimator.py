@@ -569,9 +569,9 @@ class TorchEstimator:
                 x = torch.tensor(data.transpose(0,3,1,2), dtype=torch.float)
                 c = None
         pred = self.model(x=x, c=c)["decoder"]
-        if isinstance(pred, list) or isinstance(pred, torch.Tensor):
-            # multiple output model, but only care about first output
-            pred = pred[0]
+        # if isinstance(pred, list) or isinstance(pred, torch.Tensor):
+        #     # multiple output model, but only care about first output
+        #     pred = pred[0]
         return pred
 
     def evaluate_model(self, dataset=None):
