@@ -609,7 +609,7 @@ class Cluster:
                 n_iterations=2,
                 directed=False
             )
-            self.cluster_mpp._data[self.config["cluster_name"]] = np.array(adata.obs["clustering"])
+            self.cluster_mpp._data[self.config["cluster_name"]] = np.array(adata.obs["clustering"]).astype(str).astype(object)
             if self.config["umap"]:
                 self.log.info("Calculating umap")
                 sc.tl.umap(adata)
@@ -623,7 +623,7 @@ class Cluster:
             cluster_rep = self.cluster_mpp.get_adata(X=self.config["cluster_rep"]).X
             kmeans = est.fit(cluster_rep).labels_ # used to be self.cluster_mpp.data(self.config["cluster_rep"])
             # TODO: cast kmeans to str?
-            self.cluster_mpp._data[self.config["cluster_name"]] = kmeans
+            self.cluster_mpp._data[self.config["cluster_name"]] = kmeans.astype(str).astype(object)
         else:
             raise NotImplementedError(self.config["cluster_method"])
 

@@ -1334,7 +1334,7 @@ class MPPData:
                 # print('values:', values, values.shape, values.dtype)
                 values = values[:, channel_ids]
         else:
-            values = self._data[data][mask].astype(str) ## THIS SHOULD BE STRING
+            values = self._data[data][mask]
         if len(values.shape) == 1:
             values = values[:, np.newaxis]
         # color image if necessary
