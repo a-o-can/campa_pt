@@ -363,12 +363,13 @@ class TorchEstimator:
             key: LossEnumTorch(val).get_fn() for key, val in self.config["training"]["loss"].items()
         }
         self.config["training"]["metrics"] = {
-            key: LossEnumTorch(val).get_fn() for key, val in self.config["training"]["metrics"].items()
+            key+"_metrics": LossEnumTorch(val).get_fn() for key, val in self.config["training"]["metrics"].items()
         }
         self.callbacks: list[object] = []
 
         # create model
         self.criterion = self.config["training"]["loss"]
+        self.metrics = self.config["training"]["metrics"]
         self.optimizer = None
         self.epoch = 0
         self.create_model()
@@ -504,26 +505,32 @@ class TorchEstimator:
         self.model.train()
         train_loader = self.ds.get_torch_dataloader("train", batch_size=config["batch_size"], shuffled=True, is_conditional=self.model.is_conditional)
         val_loader = self.ds.get_torch_dataloader("val", batch_size=config["batch_size"], shuffled=False, is_conditional=self.model.is_conditional)
-        history = []
+        history_list = []
         for epoch in tqdm(range(config["epochs"]), desc="Epochs"):
             epoch_loss = 0
             epoch_individual_loss = {key+"_loss": 0 for key in self.criterion}
+            epoch_individual_metrics = {key: 0 for key in self.metrics}
             n_batch = 0
             for batch in tqdm(train_loader, desc="Batches", leave=False):
                 self.optimizer.zero_grad()
                 outputs, targets = self.inference(batch=batch)
                 losses = {key: self.criterion[key](targets, outputs[key]) for key in self.criterion}
+                metrics = {key: self.metrics[key](targets, outputs[key.split("_")[0]]).cpu().item() for key in self.metrics}
                 loss = sum(losses[key] * self.loss_weights[key] for key in self.criterion)
                 loss.backward()
                 self.optimizer.step()
                 epoch_loss += loss.item()
                 epoch_individual_loss = {key+"_loss": epoch_individual_loss[key+"_loss"] + losses[key].item() for key in self.criterion}
+                epoch_individual_metrics = {key: epoch_individual_metrics[key] + metrics[key] for key in self.metrics}
                 n_batch += 1
             epoch_loss = epoch_loss/n_batch
             epoch_individual_loss = {key: value / n_batch for key, value in epoch_individual_loss.items()}
+            epoch_individual_metrics = {key: value / n_batch for key, value in epoch_individual_metrics.items()}
             val_loss = self.evaluate_model(val_loader)
             history = {"epoch": epoch, "loss": epoch_loss, "val_loss": val_loss}
             history.update(epoch_individual_loss)
+            history.update(epoch_individual_metrics)
+            history_list.append(history)
             self.log.info(history)
         self.epoch += config["epochs"]
         if config["save_model_weights"]:
@@ -531,7 +538,7 @@ class TorchEstimator:
             self.log.info(f"Saving model to {weights_name}")
             torch.save(self.model.state_dict(), weights_name)
         if config["save_history"]:
-            history_df = pd.DataFrame([history])
+            history_df = pd.DataFrame(history_list)
             if os.path.exists(self.history_name) and not config["overwrite_history"]:
                 prev_history = pd.read_csv(self.history_name, index_col=0)
                 history_df = pd.concat([prev_history, history_df])
@@ -564,11 +571,11 @@ class TorchEstimator:
         else:
             if self.model.is_conditional:
                 x = torch.tensor(data[0].transpose(0,3,1,2), dtype=torch.float)
-                c = torch.tensor(data[1], dtype=torch.float)
+                c = torch.tensor(data[1], dtype=torch.float).to(self.device)
             else:
                 x = torch.tensor(data.transpose(0,3,1,2), dtype=torch.float)
                 c = None
-        pred = self.model(x=x, c=c)["decoder"]
+        pred = self.model(x=x.to(self.device), c=c)["decoder"]
         # if isinstance(pred, list) or isinstance(pred, torch.Tensor):
         #     # multiple output model, but only care about first output
         #     pred = pred[0]

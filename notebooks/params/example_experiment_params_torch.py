@@ -32,7 +32,7 @@ base_config = {
     },
     "training": {
         "learning_rate": 0.001,
-        "epochs": 1,
+        "epochs": 2,
         "batch_size": 128,
         "loss": {"decoder": LossEnumTorch.SIGMA_MSE_Torch, "latent": LossEnumTorch.KL_Torch},
         "loss_weights": {"decoder": 1, "latent": 1},

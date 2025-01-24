@@ -467,7 +467,7 @@ class ModelComparator:
             pred_imgs = self.img_mpps[exp_name].get_object_imgs(
                 data="decoder", channel_ids=output_channel_ids[exp_name], **kwargs
             )
-            predicted_imgs.append(pred_imgs)
+            predicted_imgs.append([img.astype(float) for img in pred_imgs])
 
         # plot
         for img_id in img_ids:
@@ -797,11 +797,11 @@ class TorchPredictor:
         # get representations
         if rep == "latent":
             if not self.est.model.is_conditional:
-                return self.est.model.encoder(torch.tensor(data.transpose(0,3,1,2))) # because mpp has shape batch_size x neighbors x neighbors x channels
+                return self.est.model.encoder(torch.tensor(data.transpose(0,3,1,2)).to(self.est.device)) # because mpp has shape batch_size x neighbors x neighbors x channels
             else:
-                x = torch.tensor(data[0].transpose(0,3,1,2), dtype=self.est.model.condition_encoder_latent[0].bias.dtype)
-                c = self.est.model.condition_encoder_latent(torch.tensor(data[1], dtype=self.est.model.condition_encoder_latent[0].bias.dtype))[:, :, None, None].expand(-1,-1,3,3)
-                x = torch.cat([x, c], dim=1) # dim=1 is the channel dimension.
+                x = torch.tensor(data[0].transpose(0,3,1,2), dtype=self.est.model.condition_encoder_latent[0].bias.dtype).to(self.est.device)
+                c = self.est.model.condition_encoder_latent(torch.tensor(data[1], dtype=self.est.model.condition_encoder_latent[0].bias.dtype).to(self.est.device))[:, :, None, None].expand(-1,-1,3,3)
+                x = torch.cat([x, c], dim=1).to(self.est.device) # dim=1 is the channel dimension.
                 return self.est.model.encoder(torch.tensor(x)) # because mpp has shape batch_size x neighbors x neighbors x channels
         # elif rep == "entangled":
         #     # this is only for cVAE models which have an "entangled" layer in the decoder
