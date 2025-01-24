@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 from campa.data import MPPData
 from campa.utils import merged_config
 from campa.constants import campa_config
-from campa.tl._evaluate import Predictor, TorchPredictor
+from campa.tl._evaluate import TorchPredictor #, Predictor
 
 
 # annotation fns

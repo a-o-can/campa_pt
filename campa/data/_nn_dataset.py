@@ -4,7 +4,7 @@ import json
 import logging
 
 import numpy as np
-import tensorflow as tf
+# import tensorflow as tf
 
 from campa.constants import campa_config
 from campa.data._data import MPPData
@@ -114,193 +114,193 @@ def create_dataset(params: Mapping[str, Any]) -> None:
     json.dump(params, open(os.path.join(outdir, "params.json"), "w"), indent=4)
 
 
-class NNDataset:
-    """
-    Dataset for training and evaluation of neural networks.
+# class NNDataset:
+#     """
+#     Dataset for training and evaluation of neural networks.
 
-    A ``NNDataset`` is stored within ``DATA_DIR/dataset_name``.
-    This folder contains `train`/`val`/`test`/`val_img`/`test_img` folders with :class:`MPPData` objects.
+#     A ``NNDataset`` is stored within ``DATA_DIR/dataset_name``.
+#     This folder contains `train`/`val`/`test`/`val_img`/`test_img` folders with :class:`MPPData` objects.
 
-    Parameters
-    ----------
-    dataset_name:
-        name of the dataset, relative to ``DATA_DIR``
-    data_config:
-        name of the data config to use, should be registered in ``campa.ini``
-    """
+#     Parameters
+#     ----------
+#     dataset_name:
+#         name of the dataset, relative to ``DATA_DIR``
+#     data_config:
+#         name of the data config to use, should be registered in ``campa.ini``
+#     """
 
-    def __init__(self, dataset_name: str, data_config: Optional[str] = None):
-        self.log = logging.getLogger(self.__class__.__name__)
-        if data_config is None:
-            self.data_config_name = "NascentRNA"
-            self.log.warning(f"Using default data_config {self.data_config_name}")
-        else:
-            self.data_config_name = data_config
-        self.data_config = campa_config.get_data_config(self.data_config_name)
-        self.dataset_folder = os.path.join(self.data_config.DATASET_DIR, dataset_name)
+#     def __init__(self, dataset_name: str, data_config: Optional[str] = None):
+#         self.log = logging.getLogger(self.__class__.__name__)
+#         if data_config is None:
+#             self.data_config_name = "NascentRNA"
+#             self.log.warning(f"Using default data_config {self.data_config_name}")
+#         else:
+#             self.data_config_name = data_config
+#         self.data_config = campa_config.get_data_config(self.data_config_name)
+#         self.dataset_folder = os.path.join(self.data_config.DATASET_DIR, dataset_name)
 
-        # data
-        self.data: Dict[str, MPPData] = {
-            "train": MPPData.from_data_dir(
-                os.path.join(self.dataset_folder, "train"), base_dir="", data_config=self.data_config_name
-            ),
-            "val": MPPData.from_data_dir(
-                os.path.join(self.dataset_folder, "val"), base_dir="", data_config=self.data_config_name
-            ),
-            "test": MPPData.from_data_dir(
-                os.path.join(self.dataset_folder, "test"), base_dir="", data_config=self.data_config_name
-            ),
-        }
-        """
-        Train, val, and test MPPDatas.
-        """
-        self.imgs: Dict[str, MPPData] = {
-            "val": MPPData.from_data_dir(
-                os.path.join(self.dataset_folder, "val_imgs"), base_dir="", data_config=self.data_config_name
-            ),
-            "test": MPPData.from_data_dir(
-                os.path.join(self.dataset_folder, "test_imgs"), base_dir="", data_config=self.data_config_name
-            ),
-        }
-        """
-        Val and test MPPDatas containing entire images for visualisation.
-        """
-        self.channels = self.data["train"].channels.reset_index().set_index("name")
-        self.params = json.load(open(os.path.join(self.dataset_folder, "params.json")))
+#         # data
+#         self.data: Dict[str, MPPData] = {
+#             "train": MPPData.from_data_dir(
+#                 os.path.join(self.dataset_folder, "train"), base_dir="", data_config=self.data_config_name
+#             ),
+#             "val": MPPData.from_data_dir(
+#                 os.path.join(self.dataset_folder, "val"), base_dir="", data_config=self.data_config_name
+#             ),
+#             "test": MPPData.from_data_dir(
+#                 os.path.join(self.dataset_folder, "test"), base_dir="", data_config=self.data_config_name
+#             ),
+#         }
+#         """
+#         Train, val, and test MPPDatas.
+#         """
+#         self.imgs: Dict[str, MPPData] = {
+#             "val": MPPData.from_data_dir(
+#                 os.path.join(self.dataset_folder, "val_imgs"), base_dir="", data_config=self.data_config_name
+#             ),
+#             "test": MPPData.from_data_dir(
+#                 os.path.join(self.dataset_folder, "test_imgs"), base_dir="", data_config=self.data_config_name
+#             ),
+#         }
+#         """
+#         Val and test MPPDatas containing entire images for visualisation.
+#         """
+#         self.channels = self.data["train"].channels.reset_index().set_index("name")
+#         self.params = json.load(open(os.path.join(self.dataset_folder, "params.json")))
 
-    def __str__(self):
-        s = f"NNDataset for {self.data_config_name} (shape {self.data['train'].mpp.shape[1:]})."
-        s += f" train: {len(self.data['train'].mpp)}, val: {len(self.data['val'].mpp)},"
-        s += f" test: {len(self.data['test'].mpp)}"
-        return s
+#     def __str__(self):
+#         s = f"NNDataset for {self.data_config_name} (shape {self.data['train'].mpp.shape[1:]})."
+#         s += f" train: {len(self.data['train'].mpp)}, val: {len(self.data['val'].mpp)},"
+#         s += f" test: {len(self.data['test'].mpp)}"
+#         return s
 
-    def x(self, split: str, is_conditional: bool = False) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
-        """
-        Neural network inputs.
+#     def x(self, split: str, is_conditional: bool = False) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+#         """
+#         Neural network inputs.
 
-        Parameters
-        ----------
-        split
-            One of `train`, `val`, `test`.
-        is_conditional
-            Whether to add condition information to x
-        """
-        x = self.data[split].mpp.astype(np.float32)
-        if is_conditional:
-            c = self.data[split].conditions.astype(np.float32)  # type: ignore[union-attr]
-            x = (x, c)  # type: ignore[assignment]
-        return x
+#         Parameters
+#         ----------
+#         split
+#             One of `train`, `val`, `test`.
+#         is_conditional
+#             Whether to add condition information to x
+#         """
+#         x = self.data[split].mpp.astype(np.float32)
+#         if is_conditional:
+#             c = self.data[split].conditions.astype(np.float32)  # type: ignore[union-attr]
+#             x = (x, c)  # type: ignore[assignment]
+#         return x
 
-    def y(self, split: str, output_channels: Optional[Iterable[str]] = None) -> np.ndarray:
-        """
-        Groundtruth outputs.
+#     def y(self, split: str, output_channels: Optional[Iterable[str]] = None) -> np.ndarray:
+#         """
+#         Groundtruth outputs.
 
-        Parameters
-        ----------
-        split
-            One of `train`, `val`, `test`.
-        output_channels
-            Channels that should be predicted by the neural network.
-            Defaults to all input channels.
-        """
-        y = self.data[split].center_mpp
-        if output_channels is not None:
-            channel_ids = self.data[split].get_channel_ids(list(output_channels))
-            y = y[:, channel_ids]
-        return y
+#         Parameters
+#         ----------
+#         split
+#             One of `train`, `val`, `test`.
+#         output_channels
+#             Channels that should be predicted by the neural network.
+#             Defaults to all input channels.
+#         """
+#         y = self.data[split].center_mpp
+#         if output_channels is not None:
+#             channel_ids = self.data[split].get_channel_ids(list(output_channels))
+#             y = y[:, channel_ids]
+#         return y
 
-    def get_tf_dataset(
-        self,
-        split: str = "train",
-        output_channels: Optional[Iterable[str]] = None,
-        is_conditional: bool = False,
-        repeat_y: Union[bool, int] = False,
-        add_c_to_y: bool = False,
-        shuffled: bool = False,
-    ) -> tf.data.Dataset:
-        """
-        :class:`tf.data.Dataset` of the desired split.
+    # def get_tf_dataset(
+    #     self,
+    #     split: str = "train",
+    #     output_channels: Optional[Iterable[str]] = None,
+    #     is_conditional: bool = False,
+    #     repeat_y: Union[bool, int] = False,
+    #     add_c_to_y: bool = False,
+    #     shuffled: bool = False,
+    # ) -> tf.data.Dataset:
+    #     """
+    #     :class:`tf.data.Dataset` of the desired split.
 
-        Parameters
-        ----------
-        split
-            One of `train`, `val`, `test`.
-        output_channels
-            Channels that should be predicted by the neural network.
-            Defaults to all input channels.
-        is_conditional
-            Whether to add condition information to x
-        repeat_y:
-            Match output length to number of losses
-            (otherwise keras will not work, even if its losses that do not need y).
-        add_c_to_y
-            Append condition to y. Needed for adversarial loss.
-        shuffled
-            Shuffle indices before generating data.
-            Will produce same order every time.
+    #     Parameters
+    #     ----------
+    #     split
+    #         One of `train`, `val`, `test`.
+    #     output_channels
+    #         Channels that should be predicted by the neural network.
+    #         Defaults to all input channels.
+    #     is_conditional
+    #         Whether to add condition information to x
+    #     repeat_y:
+    #         Match output length to number of losses
+    #         (otherwise keras will not work, even if its losses that do not need y).
+    #     add_c_to_y
+    #         Append condition to y. Needed for adversarial loss.
+    #     shuffled
+    #         Shuffle indices before generating data.
+    #         Will produce same order every time.
 
-        Returns
-        -------
-        :class:`tf.data.Dataset`
-            The dataset.
-        """
-        output_types = []
-        output_shapes = []
+    #     Returns
+    #     -------
+    #     :class:`tf.data.Dataset`
+    #         The dataset.
+    #     """
+    #     output_types = []
+    #     output_shapes = []
 
-        # x
-        x = self.x(split, is_conditional)
-        if is_conditional:
-            num = x[0].shape[0]
-            output_types.append((tf.float32, tf.float32))
-            output_shapes.append((tf.TensorShape(x[0].shape[1:]), tf.TensorShape(x[1].shape[1:])))
-        else:
-            num = x.shape[0]  # type: ignore[union-attr]
-            output_types.append(tf.float32)
-            output_shapes.append(tf.TensorShape(x.shape[1:]))  # type: ignore[union-attr]
+    #     # x
+    #     x = self.x(split, is_conditional)
+    #     if is_conditional:
+    #         num = x[0].shape[0]
+    #         output_types.append((tf.float32, tf.float32))
+    #         output_shapes.append((tf.TensorShape(x[0].shape[1:]), tf.TensorShape(x[1].shape[1:])))
+    #     else:
+    #         num = x.shape[0]  # type: ignore[union-attr]
+    #         output_types.append(tf.float32)
+    #         output_shapes.append(tf.TensorShape(x.shape[1:]))  # type: ignore[union-attr]
 
-        # y
-        y = self.y(split, output_channels)
-        output_types.append(tf.float32)
-        output_shapes.append(tf.TensorShape(y.shape[1:]))
-        if repeat_y is not False:  # TODO concat c here instead of y! (for adv loss)
-            output_types[1] = tuple(tf.float32 for _ in range(repeat_y))  # type: ignore[assignment]
-            y = tuple(y for _ in range(repeat_y))  # type: ignore[assignment]
-            output_shapes[1] = tuple(output_shapes[1] for _ in range(repeat_y))  # type: ignore[assignment]
-        if add_c_to_y is not False:
-            assert is_conditional
-            # get output_type and shape for c from first output
-            c_output_type = output_types[0][1]
-            c_output_shape = output_shapes[0][1]
-            # add c to y and output data to types and shapes
-            if isinstance(output_types[1], tuple):
-                output_types[1] = tuple(list(output_types[1]) + [c_output_type])  # type: ignore[assignment]
-                y = tuple(list(y) + [x[1]])  # type: ignore[assignment]
-                output_shapes[1] = tuple(list(output_shapes[1]) + [c_output_shape])  # type: ignore[assignment]
-            else:
-                output_types[1] = (output_types[1], c_output_type)
-                y = (y, x[1])
-                output_shapes[1] = (output_shapes[1], c_output_shape)
+    #     # y
+    #     y = self.y(split, output_channels)
+    #     output_types.append(tf.float32)
+    #     output_shapes.append(tf.TensorShape(y.shape[1:]))
+    #     if repeat_y is not False:  # TODO concat c here instead of y! (for adv loss)
+    #         output_types[1] = tuple(tf.float32 for _ in range(repeat_y))  # type: ignore[assignment]
+    #         y = tuple(y for _ in range(repeat_y))  # type: ignore[assignment]
+    #         output_shapes[1] = tuple(output_shapes[1] for _ in range(repeat_y))  # type: ignore[assignment]
+    #     if add_c_to_y is not False:
+    #         assert is_conditional
+    #         # get output_type and shape for c from first output
+    #         c_output_type = output_types[0][1]
+    #         c_output_shape = output_shapes[0][1]
+    #         # add c to y and output data to types and shapes
+    #         if isinstance(output_types[1], tuple):
+    #             output_types[1] = tuple(list(output_types[1]) + [c_output_type])  # type: ignore[assignment]
+    #             y = tuple(list(y) + [x[1]])  # type: ignore[assignment]
+    #             output_shapes[1] = tuple(list(output_shapes[1]) + [c_output_shape])  # type: ignore[assignment]
+    #         else:
+    #             output_types[1] = (output_types[1], c_output_type)
+    #             y = (y, x[1])
+    #             output_shapes[1] = (output_shapes[1], c_output_shape)
 
-        # create a generator dataset:
-        indices = np.arange(num)
-        if shuffled:
-            rng = np.random.default_rng(seed=0)
-            rng.shuffle(indices)
+    #     # create a generator dataset:
+    #     indices = np.arange(num)
+    #     if shuffled:
+    #         rng = np.random.default_rng(seed=0)
+    #         rng.shuffle(indices)
 
-        def gen():
-            for i in indices:
-                if is_conditional:
-                    el_x = (x[0][i], x[1][i])
-                else:
-                    el_x = x[i]  # type: ignore[assignment]
-                if repeat_y is not False:
-                    el_y = tuple(y[j][i] for j in range(len(y)))
-                else:
-                    el_y = y[i]
-                yield (el_x, el_y)
+    #     def gen():
+    #         for i in indices:
+    #             if is_conditional:
+    #                 el_x = (x[0][i], x[1][i])
+    #             else:
+    #                 el_x = x[i]  # type: ignore[assignment]
+    #             if repeat_y is not False:
+    #                 el_y = tuple(y[j][i] for j in range(len(y)))
+    #             else:
+    #                 el_y = y[i]
+    #             yield (el_x, el_y)
 
-        dataset = tf.data.Dataset.from_generator(gen, tuple(output_types), tuple(output_shapes))
-        return dataset
+    #     dataset = tf.data.Dataset.from_generator(gen, tuple(output_types), tuple(output_shapes))
+    #     return dataset
 
 
 class NNTorchDataset(Dataset):
