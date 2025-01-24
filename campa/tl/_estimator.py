@@ -526,8 +526,10 @@ class TorchEstimator:
             epoch_loss = epoch_loss/n_batch
             epoch_individual_loss = {key: value / n_batch for key, value in epoch_individual_loss.items()}
             epoch_individual_metrics = {key: value / n_batch for key, value in epoch_individual_metrics.items()}
-            val_loss = self.evaluate_model(val_loader)
+            val_loss, val_losses, val_metrics = self.evaluate_model(val_loader)
             history = {"epoch": epoch, "loss": epoch_loss, "val_loss": val_loss}
+            history.update(val_metrics)
+            history.update(val_losses)
             history.update(epoch_individual_loss)
             history.update(epoch_individual_metrics)
             history_list.append(history)
@@ -589,10 +591,15 @@ class TorchEstimator:
         else:
             data_loader = dataset
         total_loss = 0
+        total_metrics = {"val_"+key: 0.0 for key in self.metrics} 
         with torch.no_grad():
             for batch in data_loader:
                 outputs, targets = self.inference(batch=batch)
                 losses = {key: self.criterion[key](targets, outputs[key]) for key in self.criterion}
+                metrics = {"val_"+key: self.metrics[key](targets, outputs[key.split("_")[0]]) for key in self.metrics}
+                total_metrics = {key: total_metrics[key] + value.item() for key, value in metrics.items()}
                 loss = sum(losses[key] * self.loss_weights[key] for key in self.criterion)
                 total_loss += loss.item()
-        return total_loss / len(data_loader)
+            normalized_metrics = {key: value / len(data_loader) for key, value in total_metrics.items()}  # Average across batches
+            normalized_losses = {key: value / len(data_loader) for key, value in losses.items()}  # Average across batches
+        return total_loss / len(data_loader), normalized_losses, normalized_metrics
