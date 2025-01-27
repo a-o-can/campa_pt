@@ -1,3 +1,3 @@
 from ._data import MPPData, ImageData
-from ._nn_dataset import NNDataset, NNTorchDataset, create_dataset
+from ._nn_dataset import NNTorchDataset, create_dataset #, NNDataset
 from ._download_data import load_example_data, load_example_experiment

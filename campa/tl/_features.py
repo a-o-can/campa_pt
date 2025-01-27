@@ -17,7 +17,7 @@ import numba.types as nt
 from campa.data import MPPData
 from campa.constants import CoOccAlgo, campa_config
 from campa.tl._cluster import annotate_clustering
-from campa.tl._experiment import Experiment
+from campa.tl._experiment import TorchExperiment #, Experiment
 
 ft = nt.float32
 it = nt.int64
@@ -206,7 +206,7 @@ class FeatureExtractor:
 
     def __init__(
         self,
-        exp: Experiment,
+        exp,
         data_dir: str,
         cluster_name: str,
         cluster_dir: Optional[str] = None,
