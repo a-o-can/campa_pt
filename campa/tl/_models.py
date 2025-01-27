@@ -100,37 +100,37 @@ from torch.autograd import Function
 
 # # --- Model classes ---
 
-# BASE_MODEL_CONFIG: Dict[str, Any] = {
-#     "name": None,
-#     # input definition
-#     "num_neighbors": 1,
-#     "num_channels": 35,  # can be split up in num_input_channels and num_output_channels
-#     "num_output_channels": None,
-#     "num_input_channels": None,
-#     # conditions are appended to the input and the latent representation. They are assumed to be 1d
-#     "num_conditions": 0,  # if > 0, the model is conditional and an additional input w/ conditions is assumed.
-#     # if number or list, the condition is encoded using dense layers with this number of nodes
-#     "encode_condition": None,
-#     # which layers of encoder and decoder to apply condition to.
-#     # Give index of layer in encoder and decoder
-#     "condition_injection_layers": [0],
-#     # encoder architecture
-#     "input_noise": None,  # 'gaussian', 'dropout', adds noise to encoder input
-#     "noise_scale": 0,
-#     "encoder_conv_layers": [32],
-#     "encoder_conv_kernel_size": [1],
-#     "encoder_fc_layers": [32, 16],
-#     # from last encoder layer, a linear fcl to latent_dim is applied
-#     "latent_dim": 16,  # number of nodes in latent space (for some models == number of classes)
-#     # decoder architecture
-#     # from last decoder layer, a linear fcl to num_output_channels is applied
-#     "decoder_fc_layers": [],
-#     # decoder regularizer
-#     "decoder_regularizer": None,  # 'l1' or 'l2'
-#     "decoder_regularizer_weight": 0,
-#     # for adversarial models, add adversarial layers
-#     "adversarial_layers": None,  # only works with categorical conditions
-# }
+BASE_MODEL_CONFIG: Dict[str, Any] = {
+    "name": None,
+    # input definition
+    "num_neighbors": 1,
+    "num_channels": 35,  # can be split up in num_input_channels and num_output_channels
+    "num_output_channels": None,
+    "num_input_channels": None,
+    # conditions are appended to the input and the latent representation. They are assumed to be 1d
+    "num_conditions": 0,  # if > 0, the model is conditional and an additional input w/ conditions is assumed.
+    # if number or list, the condition is encoded using dense layers with this number of nodes
+    "encode_condition": None,
+    # which layers of encoder and decoder to apply condition to.
+    # Give index of layer in encoder and decoder
+    "condition_injection_layers": [0],
+    # encoder architecture
+    "input_noise": None,  # 'gaussian', 'dropout', adds noise to encoder input
+    "noise_scale": 0,
+    "encoder_conv_layers": [32],
+    "encoder_conv_kernel_size": [1],
+    "encoder_fc_layers": [32, 16],
+    # from last encoder layer, a linear fcl to latent_dim is applied
+    "latent_dim": 16,  # number of nodes in latent space (for some models == number of classes)
+    # decoder architecture
+    # from last decoder layer, a linear fcl to num_output_channels is applied
+    "decoder_fc_layers": [],
+    # decoder regularizer
+    "decoder_regularizer": None,  # 'l1' or 'l2'
+    "decoder_regularizer_weight": 0,
+    # for adversarial models, add adversarial layers
+    "adversarial_layers": None,  # only works with categorical conditions
+}
 
 
 # class BaseAEModel:
@@ -912,7 +912,7 @@ class BaseAEModelTorch(nn.Module):
         self.log.info("Creating model")
         self.log.debug(f"Creating model with config: {json.dumps(self.config, indent=4)}")
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+        print(f"Device: {self.device}")
         # self.encoder_input = nn.ModuleList()
         # self.decoder_input = nn.ModuleList()
         # if self.is_conditional:
@@ -1058,7 +1058,7 @@ class VAEModelTorch(BaseAEModelTorch):
     
     def create_decoder(self):
         if self.is_conditional:
-            C = self.encode_condition(encoding_level="decoder")
+            # C = self.encode_condition(encoding_level="decoder")
             in_features = self.config["latent_dim"] + self.config["encode_condition"][-1]
         else:
             in_features = self.config["latent_dim"]
@@ -1074,8 +1074,8 @@ class VAEModelTorch(BaseAEModelTorch):
     def forward(self, x, c=None):
         if self.is_conditional:
             assert c!=None, "Cannot be None, must be a tensor"
-            cond = self.condition_encoder_latent(c)[:, :, None, None].expand(-1,-1,3,3)
-            x = torch.cat([x, cond], dim=1) # dim=1 is the channel dimension.
+            cond = self.condition_encoder_latent(c)[:, :, None, None]
+            x = torch.cat([x, cond.expand(-1,-1,3,3)], dim=1) # dim=1 is the channel dimension.
         x = self.encoder(x)
         latent = self.latent(x)
         reparam_latent = reparameterize_gaussian_torch(latent)
@@ -1083,7 +1083,7 @@ class VAEModelTorch(BaseAEModelTorch):
             adv_output = self.adv_head(reparam_latent)
             return reparam_latent, adv_output
         if self.is_conditional:
-            reparam_latent = torch.cat([reparam_latent, self.condition_encoder_decoder(c)], dim=1) # dim=1 is the channel dimension.
+            reparam_latent = torch.cat([reparam_latent, cond.squeeze()], dim=1) # dim=1 is the channel dimension.
         reparam_latent = self.decoder(reparam_latent)
         return {"decoder": reparam_latent, "latent":x}
     
