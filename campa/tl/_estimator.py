@@ -23,6 +23,7 @@ from torch.utils.data import Dataset, DataLoader
 import numpy as np
 from tqdm import tqdm
 
+import pytorch_warmup as warmup
 
 # # --- Callbacks ---
 # class LossWarmup(tf.keras.callbacks.Callback):
@@ -506,11 +507,18 @@ class TorchEstimator:
         train_loader = self.ds.get_torch_dataloader("train", batch_size=config["batch_size"], shuffled=True, is_conditional=self.model.is_conditional)
         val_loader = self.ds.get_torch_dataloader("val", batch_size=config["batch_size"], shuffled=False, is_conditional=self.model.is_conditional)
         history_list = []
+
+        iters = len(train_loader)
+        num_steps = iters * config["epochs"]
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(self.optimizer, T_0=num_steps)
+        warmup_scheduler = warmup.LinearWarmup(self.optimizer, warmup_period=1000)
+        
         for epoch in tqdm(range(config["epochs"]), desc="Epochs"):
             epoch_loss = 0
             epoch_individual_loss = {key: 0 for key in self.criterion}
             epoch_individual_metrics = {key: 0 for key in self.metrics}
             n_batch = 0
+            idx = 1
             for batch in tqdm(train_loader, desc="Batches", leave=False):
                 self.optimizer.zero_grad()
                 outputs, targets = self.inference(batch=batch)
@@ -519,10 +527,13 @@ class TorchEstimator:
                 loss = sum(losses[key] * self.loss_weights[key] for key in self.criterion)
                 loss.backward()
                 self.optimizer.step()
+                with warmup_scheduler.dampening():
+                    lr_scheduler.step(epoch + idx / iters)
                 epoch_loss += loss.item()
                 epoch_individual_loss = {key: epoch_individual_loss[key] + losses[key].item() for key in self.criterion}
                 epoch_individual_metrics = {key: epoch_individual_metrics[key] + metrics[key] for key in self.metrics}
                 n_batch += 1
+                idx += 1
             epoch_loss = epoch_loss/n_batch
             epoch_individual_loss = {key+"_loss": value / n_batch for key, value in epoch_individual_loss.items()}
             epoch_individual_metrics = {key+"_metrics": value / n_batch for key, value in epoch_individual_metrics.items()}

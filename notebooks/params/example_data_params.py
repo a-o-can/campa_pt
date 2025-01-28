@@ -48,7 +48,7 @@ data_params = {
     # The suffix '_one_hot' will convert the condition in a one-hot encoded vector.
     # Conditions are concatenated, except when they are defined as a list of lists.
     # In this case the condition is defined as a pairwise combination of the conditions.
-    "condition": ["perturbation_duration_one_hot", "cell_cycle_one_hot"],
+    "condition": ["perturbation_duration_one_hot"],
     "condition_kwargs": {"cond_params": {}},
     # train/val/test split
     "split_kwargs": {
@@ -68,7 +68,7 @@ data_params = {
     "subsample": True,
     # kwargs for MPPData.subsample() defining the fraction of pixels to be sampled
     "subsample_kwargs": {
-        "frac": 0.001,
+        "frac": 0.1,
         "frac_per_obj": None,
         "num": None,
         "num_per_obj": None,

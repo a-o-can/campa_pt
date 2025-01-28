@@ -32,10 +32,10 @@ base_config = {
     },
     "training": {
         "learning_rate": 0.001,
-        "epochs": 2,
+        "epochs": 10,
         "batch_size": 128,
         "loss": {"decoder": LossEnumTorch.SIGMA_MSE_Torch, "latent": LossEnumTorch.KL_Torch},
-        "loss_weights": {"decoder": 1, "latent": 1},
+        "loss_weights": {"decoder": 1, "latent": 0},
         "metrics": {"decoder": LossEnumTorch.MSE_metric_Torch, "latent": LossEnumTorch.KL_Torch},
         # saving models
         "save_model_weights": True,
@@ -75,7 +75,7 @@ variable_config = [
         "model": {
             "model_cls": ModelEnumTorch.VAEModelTorch,
             "model_kwargs": {
-                "num_conditions": 14,
+                "num_conditions": 10,
                 "encode_condition": [10, 10],
             },
         },

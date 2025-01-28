@@ -85,7 +85,7 @@ class KSparseTorch(nn.Module):
     """
 
     def __init__(self, sparsity_levels):
-        super(KSparse, self).__init__()
+        super(KSparseTorch, self).__init__()
         self.sparsity_levels = sparsity_levels
         self.k = nn.Parameter(torch.tensor(self.sparsity_levels[0]), requires_grad=False)
 
@@ -109,7 +109,7 @@ class UpdateSparsityLevelTorch:
         Update sparsity level.
         """
         try:
-            layer = next(m for m in self.model.modules() if isinstance(m, KSparse))
+            layer = next(m for m in self.model.modules() if isinstance(m, KSparseTorch))
             layer.k.data = torch.tensor(layer.sparsity_levels[epoch])
             print(f"set k to {layer.k.item()}")
         except StopIteration:

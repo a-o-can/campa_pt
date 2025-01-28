@@ -1074,8 +1074,8 @@ class VAEModelTorch(BaseAEModelTorch):
     def forward(self, x, c=None):
         if self.is_conditional:
             assert c!=None, "Cannot be None, must be a tensor"
-            cond = self.condition_encoder_latent(c)[:, :, None, None]
-            x = torch.cat([x, cond.expand(-1,-1,3,3)], dim=1) # dim=1 is the channel dimension.
+            cond = self.condition_encoder_latent(c)
+            x = torch.cat([x, cond[:,:,None,None].expand(-1,-1,3,3)], dim=1) # dim=1 is the channel dimension.
         x = self.encoder(x)
         latent = self.latent(x)
         reparam_latent = reparameterize_gaussian_torch(latent)
@@ -1083,7 +1083,7 @@ class VAEModelTorch(BaseAEModelTorch):
             adv_output = self.adv_head(reparam_latent)
             return reparam_latent, adv_output
         if self.is_conditional:
-            reparam_latent = torch.cat([reparam_latent, cond.squeeze()], dim=1) # dim=1 is the channel dimension.
+            reparam_latent = torch.cat([reparam_latent, cond], dim=1) # dim=1 is the channel dimension.
         reparam_latent = self.decoder(reparam_latent)
         return {"decoder": reparam_latent, "latent":x}
     
