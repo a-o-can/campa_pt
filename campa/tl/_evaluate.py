@@ -661,7 +661,10 @@ class TorchPredictor:
         # set batch size
         self.batch_size = batch_size
         if self.batch_size is None:
-            self.batch_size = self.exp.config["evaluation"].get("batch_size", self.exp.config["training"]["batch_size"])
+            try:
+                self.batch_size = self.exp.config["evaluation"]["batch_size"]
+            except:
+                self.batch_size = self.exp.config["training"]["batch_size"]
 
         # build estimator
         self.est = TorchEstimator(exp)

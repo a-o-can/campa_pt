@@ -22,6 +22,7 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 from tqdm import tqdm
+import re
 
 import pytorch_warmup as warmup
 
@@ -438,11 +439,22 @@ class TorchEstimator:
         Utility function for pytorch because tf.train.latest_checkpoint does not exist.
         Find the latest checkpoint in the given path.
         """
-        checkpoints = [f for f in os.listdir(path) if f.endswith('.pt')]
-        if not checkpoints:
-            return None
-        latest_checkpoint = max(checkpoints, key=lambda f: os.path.getctime(os.path.join(path, f)))
-        return os.path.join(path, latest_checkpoint)
+        # Regular expression to match the naming convention "weights_epoch<3 digit int>"
+        pattern = re.compile(r'weights_epoch(\d{3})')
+
+        max_epoch = -1
+        latest_weights_path = None
+
+        # Iterate over all files in the directory
+        for filename in os.listdir(path):
+            match = pattern.search(filename)
+            if match:
+                epoch = int(match.group(1))
+                if epoch > max_epoch:
+                    max_epoch = epoch
+                    latest_weights_path = os.path.join(path, filename)
+
+        return latest_weights_path
     
     def create_model(self):
         ModelClass = ModelEnumTorch(self.config["model"]["model_cls"]).get_cls()
@@ -457,6 +469,7 @@ class TorchEstimator:
                 )
         if isinstance(weights_path, str):
             self.log.info(f"Initializing model with weights from {weights_path}")
+            print(f"Initializing model with weights from {weights_path}")
             self.model.load_state_dict(torch.load(weights_path))
             self.epoch = self.exp.epoch
 
@@ -508,10 +521,10 @@ class TorchEstimator:
         val_loader = self.ds.get_torch_dataloader("val", batch_size=config["batch_size"], shuffled=False, is_conditional=self.model.is_conditional)
         history_list = []
 
-        iters = len(train_loader)
-        num_steps = iters * config["epochs"]
-        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(self.optimizer, T_0=num_steps)
-        warmup_scheduler = warmup.LinearWarmup(self.optimizer, warmup_period=1000)
+        # iters = len(train_loader)
+        # num_steps = iters * config["epochs"]
+        # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(self.optimizer, T_0=num_steps)
+        # warmup_scheduler = warmup.LinearWarmup(self.optimizer, warmup_period=1000)
         
         for epoch in tqdm(range(config["epochs"]), desc="Epochs"):
             epoch_loss = 0
@@ -527,8 +540,10 @@ class TorchEstimator:
                 loss = sum(losses[key] * self.loss_weights[key] for key in self.criterion)
                 loss.backward()
                 self.optimizer.step()
-                with warmup_scheduler.dampening():
-                    lr_scheduler.step(epoch + idx / iters)
+
+                # with warmup_scheduler.dampening():
+                #     lr_scheduler.step(epoch + idx / iters)
+                
                 epoch_loss += loss.item()
                 epoch_individual_loss = {key: epoch_individual_loss[key] + losses[key].item() for key in self.criterion}
                 epoch_individual_metrics = {key: epoch_individual_metrics[key] + metrics[key] for key in self.metrics}
@@ -545,10 +560,11 @@ class TorchEstimator:
             history.update(epoch_individual_metrics)
             history_list.append(history)
             self.log.info(history)
-        self.epoch += config["epochs"]
+            self.epoch += 1
         if config["save_model_weights"]:
             weights_name = self.weights_name.format(self.epoch)
             self.log.info(f"Saving model to {weights_name}")
+            print(f"Saving model to {weights_name}")
             torch.save(self.model.state_dict(), weights_name)
         if config["save_history"]:
             history_df = pd.DataFrame(history_list)

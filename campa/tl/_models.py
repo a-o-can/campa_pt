@@ -868,6 +868,11 @@ def reparameterize_gaussian_torch(latent):
     eps = torch.randn_like(z_mean)
     return eps * torch.exp(z_log_var * 0.5) + z_mean
 
+def init_weights(m):
+    if isinstance(m, nn.Linear):
+        torch.nn.init.xavier_uniform(m.weight)
+        m.bias.data.fill_(0.01)
+
 class GradReverseTorch(Function):
     """Reverse gradients for adversarial loss."""
     @staticmethod
@@ -927,7 +932,7 @@ class BaseAEModelTorch(nn.Module):
     def _create_base_encoder(self):
         layers = []
         if self.is_conditional:
-            C = self.encode_condition(encoding_level="encoder")
+            self.create_condition_encoder(encoding_level="encoder")
             in_channels = self.config["num_channels"] + self.config["encode_condition"][-1]
         else:
             in_channels = self.config["num_channels"]
@@ -976,7 +981,7 @@ class BaseAEModelTorch(nn.Module):
         adv_head = nn.Sequential(*layers)
         return adv_head
 
-    def encode_condition(self, encoding_level="encoder"):
+    def create_condition_encoder(self, encoding_level="encoder"):
         if self.config["encode_condition"] is None:
             return nn.Identity()
         if not hasattr(self, "condition_encoder"):
@@ -992,9 +997,14 @@ class BaseAEModelTorch(nn.Module):
             condition_encoder = nn.Sequential(*layers)
         if encoding_level == "encoder":
             self.condition_encoder_latent = condition_encoder
-            return self.condition_encoder_latent
         elif encoding_level == "decoder":
             self.condition_encoder_decoder = condition_encoder
+        print("Condition encoder created")
+
+    def encode_condition(self, encoding_level="encoder"):
+        if encoding_level == "encoder":
+            return self.condition_encoder_latent
+        elif encoding_level == "decoder":
             return self.condition_encoder_decoder
 
     def add_noise(self, X):
@@ -1054,6 +1064,8 @@ class VAEModelTorch(BaseAEModelTorch):
         """
         encoder = self._create_base_encoder()
         latent = nn.Linear(self.config["encoder_fc_layers"][-1], self.config["latent_dim"] * 2)
+        # encoder.apply(init_weights)
+        # latent.apply(init_weights)
         return encoder, latent
     
     def create_decoder(self):
@@ -1069,12 +1081,13 @@ class VAEModelTorch(BaseAEModelTorch):
             in_features = fc_layer
         layers.append(nn.Linear(in_features, self.config["num_output_channels"]))
         decoder = nn.Sequential(*layers)
+        # decoder.apply(init_weights)
         return decoder
 
     def forward(self, x, c=None):
         if self.is_conditional:
             assert c!=None, "Cannot be None, must be a tensor"
-            cond = self.condition_encoder_latent(c)
+            cond = self.encode_condition(encoding_level="encoder")(c)
             x = torch.cat([x, cond[:,:,None,None].expand(-1,-1,3,3)], dim=1) # dim=1 is the channel dimension.
         x = self.encoder(x)
         latent = self.latent(x)
@@ -1151,46 +1164,46 @@ class CatVAEModelTorch(BaseAEModelTorch):
         return reparam_latent, x
     
 
-class CondCatVAEModelTorch(CatVAEModelTorch):
-    """
-    Conditional Categorical VAE model.
+# class CondCatVAEModelTorch(CatVAEModelTorch):
+#     """
+#     Conditional Categorical VAE model.
 
-    Conditional Categorical VAE using another concatenation scheme when adding the condition
-    to the latent space. This model first calculates a fully connected layer to a vector
-    with length #output_channels x #conditions
+#     Conditional Categorical VAE using another concatenation scheme when adding the condition
+#     to the latent space. This model first calculates a fully connected layer to a vector
+#     with length #output_channels x #conditions
 
-    IGNORES decoder_fc_layers - only supports linear decoder!
-    """
+#     IGNORES decoder_fc_layers - only supports linear decoder!
+#     """
 
-    def create_decoder(self):
-        """
-        Create decoder.
-        """
-        class Decoder(nn.Module):
-            def __init__(self, config):
-                super(Decoder, self).__init__()
-                self.config = config
-                self.fc = nn.Linear(config["latent_dim"], config["num_output_channels"] * config["encode_condition"])
-                self.reshape = (config["num_output_channels"], config["encode_condition"])
+#     def create_decoder(self):
+#         """
+#         Create decoder.
+#         """
+#         class Decoder(nn.Module):
+#             def __init__(self, config):
+#                 super(Decoder, self).__init__()
+#                 self.config = config
+#                 self.fc = nn.Linear(config["latent_dim"], config["num_output_channels"] * config["encode_condition"])
+#                 self.reshape = (config["num_output_channels"], config["encode_condition"])
 
-            def forward(self, x, c):
-                x = self.fc(x)
-                x = x.view(-1, *self.reshape)
-                c = self.encode_condition(c)
-                decoder_output = torch.einsum('boc,bc->bo', x, c)
-                return decoder_output
+#             def forward(self, x, c):
+#                 x = self.fc(x)
+#                 x = x.view(-1, *self.reshape)
+#                 c = self.encode_condition(c)
+#                 decoder_output = torch.einsum('boc,bc->bo', x, c)
+#                 return decoder_output
 
-        return Decoder(self.config)
+#         return Decoder(self.config)
 
-    def forward(self, x, c=None):
-        if self.is_conditional:
-            x = torch.cat([x, c], dim=-1)
-        x = self.encoder(x)
-        reparam_latent = reparameterize_gumbel_softmax_torch(x, self.temperature)
-        if self.is_adversarial:
-            adv_output = self.adv_head(reparam_latent)
-            return reparam_latent, adv_output
-        return reparam_latent, x
+#     def forward(self, x, c=None):
+#         if self.is_conditional:
+#             x = torch.cat([x, c], dim=-1)
+#         x = self.encoder(x)
+#         reparam_latent = reparameterize_gumbel_softmax_torch(x, self.temperature)
+#         if self.is_adversarial:
+#             adv_output = self.adv_head(reparam_latent)
+#             return reparam_latent, adv_output
+#         return reparam_latent, x
     
 
 class GMMVAEModelTorch(BaseAEModelTorch):
