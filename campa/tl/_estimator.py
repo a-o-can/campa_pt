@@ -424,7 +424,7 @@ class TorchEstimator:
             self._test_dataset = self._get_dataset("test")
         return self._test_dataset
 
-    def _get_dataset(self, split: str, shuffled: bool = False) -> tf.data.Dataset:
+    def _get_dataset(self, split: str, shuffled: bool = False):
         return self.ds.get_torch_dataset(
             split=split,
             output_channels=self.output_channels,

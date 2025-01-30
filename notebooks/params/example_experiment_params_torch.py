@@ -9,7 +9,7 @@ base_config = {
     },
     "data": {
         "data_config": "ExampleData",
-        "dataset_name": "184A1_test_dataset",
+        "dataset_name": "184A1_frac01",
         "output_channels": None,
     },
     "model": {
@@ -32,7 +32,7 @@ base_config = {
     },
     "training": {
         "learning_rate": 0.001,
-        "epochs": 100,
+        "epochs": 20,
         "batch_size": 128,
         "loss": {"decoder": LossEnumTorch.SIGMA_MSE_Torch, "latent": LossEnumTorch.KL_Torch},
         "loss_weights": {"decoder": 1, "latent": 1},
@@ -52,7 +52,7 @@ base_config = {
     "cluster": {  # cluster config, also used in this format for whole data clustering
         "cluster_name": "clustering",
         "cluster_rep": "latent",
-        "cluster_method": "kmeans",  # leiden or kmeans
+        "cluster_method": "leiden",  # leiden or kmeans
         "leiden_resolution": 0.2,
         "subsample": None,  # 'subsample' or 'som'
         "subsample_kwargs": {},

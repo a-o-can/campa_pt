@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Mapping, Iterable, TYPE_CHECKING, MutableMapping
 
 if TYPE_CHECKING:
-    from campa.tl import Experiment
+    from campa.tl import TorchExperiment
     import anndata as ad
 
 from copy import deepcopy
@@ -566,10 +566,7 @@ class Cluster:
         if self.cluster_mpp.data(self.config["cluster_rep"]) is not None:
             self.log.info(f"cluster_mpp already contains key {self.config['cluster_rep']}. Not recalculating.")
             return
-        if exp.config["package"] == "torch":
-            pred = TorchPredictor(exp)
-        else:
-            pred = Predictor(exp)
+        pred = TorchPredictor(exp)
         cluster_rep = pred.get_representation(self.cluster_mpp, rep=self.config["cluster_rep"])
         self.cluster_mpp._data[self.config["cluster_rep"]] = cluster_rep
         # save cluster_rep
@@ -600,14 +597,10 @@ class Cluster:
             # leiden clustering
             adata = self.cluster_mpp.get_adata(X=self.config["cluster_rep"])
             sc.pp.neighbors(adata)
-            # print(adata)
             sc.tl.leiden(
                 adata,
                 resolution=self.config["leiden_resolution"],
-                key_added="clustering", 
-                flavor="igraph", 
-                n_iterations=2,
-                directed=False
+                key_added="clustering",
             )
             self.cluster_mpp._data[self.config["cluster_name"]] = np.array(adata.obs["clustering"]).astype(str).astype(object)
             if self.config["umap"]:
@@ -947,10 +940,10 @@ def prepare_full_dataset(
     data_dirs
         Data to prepare. Defaults for ``exp.data_params['data_dirs']``.
     """
-    from campa.tl import Experiment
+    from campa.tl import TorchExperiment
 
     log = logging.getLogger("prepare full dataset")
-    exp = Experiment.from_dir(experiment_dir)
+    exp = TorchExperiment.from_dir(experiment_dir)
     # iterate over all data dirs
     if data_dirs is None:
         data_dirs = exp.data_params["data_dirs"]
@@ -979,10 +972,7 @@ def prepare_full_dataset(
                 mpp_data.add_neighborhood(exp.data_params["neighborhood_size"])
             # predict rep
             log.info("Predicting latent")
-            if exp.config["package"] == "torch":
-                pred = TorchPredictor(exp)
-            else:
-                pred = Predictor(exp)
+            pred = TorchPredictor(exp)
             pred.predict(
                 mpp_data,
                 reps=[exp.config["cluster"]["cluster_rep"]],
@@ -1017,9 +1007,9 @@ def create_cluster_data(
     cluster
         Use cluster parameters in Experiment config to cluster the subsetted data.
     """
-    from campa.tl import Experiment
+    from campa.tl import TorchExperiment
 
-    exp = Experiment.from_dir(experiment_dir)
+    exp = TorchExperiment.from_dir(experiment_dir)
     cluster_config = {
         "subsample": subsample,
         "subsample_kwargs": {"frac": frac},
@@ -1062,9 +1052,9 @@ def project_cluster_data(
         Data directory to project. If not specified, project all ``data_dir``s in ``save_dir``.
         Relative to ``save_dir``.
     """
-    from campa.tl import Experiment
+    from campa.tl import TorchExperiment
 
-    exp = Experiment.from_dir(experiment_dir)
+    exp = TorchExperiment.from_dir(experiment_dir)
     # set up cluster data
     cl = Cluster.from_cluster_data_dir(os.path.join(exp.dir, exp.name, cluster_data_dir))
     cl.set_cluster_name(cluster_name)

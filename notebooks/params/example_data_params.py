@@ -65,7 +65,7 @@ data_params = {
         "cell_cycle": "NO_NAN",
     },
     # subsampling of pixels (only for train/val)
-    "subsample": False,
+    "subsample": True,
     # kwargs for MPPData.subsample() defining the fraction of pixels to be sampled
     "subsample_kwargs": {
         "frac": 0.1,

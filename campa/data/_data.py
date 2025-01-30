@@ -1170,7 +1170,10 @@ class MPPData:
         obs_ = self._get_per_mpp_value(self.metadata.to_dict(orient="list"))
         for o in obs:
             obs_[o] = self.data(o)
-        adata = ad.AnnData(X=X_.astype(np.float32), obs=obs_, var=var, obsm=obsm)
+        try:
+            adata = ad.AnnData(X=X_.astype(np.float32), obs=obs_, var=var, obsm=obsm)
+        except AttributeError: # because X_ is a torch tensor
+            adata = ad.AnnData(X=X_.detach().cpu().numpy().astype(np.float32), obs=obs_, var=var, obsm=obsm)
         # set var_names if possible
         if var is not None:
             adata.var_names = adata.var["name"]
