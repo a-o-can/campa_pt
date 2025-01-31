@@ -17,7 +17,7 @@ import numba.types as nt
 from campa.data import MPPData
 from campa.constants import CoOccAlgo, campa_config
 from campa.tl._cluster import annotate_clustering
-from campa.tl._experiment import TorchExperiment #, Experiment
+from campa.tl._experiment import TorchExperiment
 
 ft = nt.float32
 it = nt.int64

@@ -1,5 +1,5 @@
-from ._losses import LossEnumTorch #, LossEnum
-from ._models import VAEModelTorch, ModelEnumTorch, BaseAEModelTorch #, VAEModel, ModelEnum, BaseAEModel, 
+from ._losses import LossEnumTorch
+from ._models import VAEModelTorch, ModelEnumTorch, BaseAEModelTorch
 from ._cluster import (
     Cluster,
     create_cluster_data,
@@ -10,12 +10,12 @@ from ._cluster import (
     add_clustering_to_adata,
     query_hpa_subcellular_location,
 )
-from ._evaluate import ModelComparator, TorchPredictor #, Predictor
+from ._evaluate import ModelComparator, TorchPredictor
 from ._features import (
     extract_features,
     FeatureExtractor,
     thresholded_count,
     thresholded_median,
 )
-from ._estimator import  TorchEstimator #, Estimator
-from ._experiment import TorchExperiment, run_torch_experiments #, Experiment, run_experiments
+from ._estimator import  TorchEstimator
+from ._experiment import TorchExperiment, run_torch_experiments
