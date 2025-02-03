@@ -70,10 +70,7 @@ class ModelComparator:
         exp_dir
             Experiment dir in which experiments are stored
         """
-        try:
-            exps = [Experiment.from_dir(os.path.join(exp_dir, exp_name)) for exp_name in exp_names]
-        except:
-            exps = [TorchExperiment.from_dir(os.path.join(exp_dir, exp_name)) for exp_name in exp_names]
+        exps = [TorchExperiment.from_dir(os.path.join(exp_dir, exp_name)) for exp_name in exp_names]
         return cls(exps, save_dir=exp_dir)
 
     def _filter_trainable_exps(self, exp_names: Iterable[str]) -> List[str]:

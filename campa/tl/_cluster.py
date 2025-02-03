@@ -222,7 +222,7 @@ class Cluster:
 
     @classmethod
     def from_exp(
-        cls, exp: Experiment, cluster_config: Mapping[str, Any] | None = None, data_dir: str = None
+        cls, exp: TorchExperiment, cluster_config: Mapping[str, Any] | None = None, data_dir: str = None
     ) -> Cluster:
         """
         Initialise from experiment for clustering of entire data that went into creating training data.
@@ -254,7 +254,7 @@ class Cluster:
         return cls(cur_cluster_config, save_config=True)
 
     @classmethod
-    def from_exp_split(cls, exp: Experiment) -> Cluster:
+    def from_exp_split(cls, exp: TorchExperiment) -> Cluster:
         """
         Initialise from experiment for clustering of val/test split.
 
@@ -551,7 +551,7 @@ class Cluster:
         if self.config["cluster_data_dir"] is not None:
             self._cluster_mpp.write(os.path.join(campa_config.EXPERIMENT_DIR, self.config["cluster_data_dir"]))
 
-    def predict_cluster_rep(self, exp: Experiment) -> None:
+    def predict_cluster_rep(self, exp: TorchExperiment) -> None:
         """
         Use experiment to predict the necessary cluster representation.
 
@@ -717,7 +717,7 @@ class Cluster:
             mpp_data.write(save_dir, save_keys=[self.config["cluster_name"]])
         return mpp_data
 
-    def predict_cluster_imgs(self, exp: Experiment) -> MPPData | None:
+    def predict_cluster_imgs(self, exp: TorchExperiment) -> MPPData | None:
         """
         Predict cluster images from experiment.
 
@@ -728,10 +728,7 @@ class Cluster:
         """
         if exp.is_trainable:
             # create Predictor
-            if exp.config["package"] == "torch":
-                pred = TorchPredictor(exp)
-            else:
-                pred = Predictor(exp)
+            pred = TorchPredictor(exp)
             # predict clustering on imgs
             img_save_dir = os.path.join(
                 exp.full_path,
@@ -1071,7 +1068,7 @@ def project_cluster_data(
 
 
 def load_full_data_dict(
-    exp: Experiment,
+    exp: TorchExperiment,
     keys: Iterable[str] = ("x", "y", "obj_ids", "latent"),
     data_dirs: Iterable[str] | None = None,
     save_dir: str = "aggregated/full_data",

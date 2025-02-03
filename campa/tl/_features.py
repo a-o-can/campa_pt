@@ -138,7 +138,7 @@ def extract_features(params: Mapping[str, Any]) -> None:
     """
     # set up FeatureExtractor
     log = logging.getLogger("extract_features")
-    exp = Experiment.from_dir(params["experiment_dir"])
+    exp = TorchExperiment.from_dir(params["experiment_dir"])
     data_dirs = params["data_dirs"]
     if data_dirs is None or len(data_dirs) == 0:
         data_dirs = exp.data_params["data_dirs"]
@@ -244,7 +244,7 @@ class FeatureExtractor:
         """
         adata = ad.read(fname)
         params = deepcopy(adata.uns["params"])
-        exp = Experiment.from_dir(params.pop("exp_name"))
+        exp = TorchExperiment.from_dir(params.pop("exp_name"))
         self = cls(exp, adata=adata, **params)
         self.fname = fname
         return self

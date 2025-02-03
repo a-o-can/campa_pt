@@ -407,46 +407,46 @@ class CatVAEModelTorch(BaseAEModelTorch):
         return reparam_latent, x
     
 
-# class CondCatVAEModelTorch(CatVAEModelTorch):
-#     """
-#     Conditional Categorical VAE model.
+class CondCatVAEModelTorch(CatVAEModelTorch):
+    """
+    Conditional Categorical VAE model.
 
-#     Conditional Categorical VAE using another concatenation scheme when adding the condition
-#     to the latent space. This model first calculates a fully connected layer to a vector
-#     with length #output_channels x #conditions
+    Conditional Categorical VAE using another concatenation scheme when adding the condition
+    to the latent space. This model first calculates a fully connected layer to a vector
+    with length #output_channels x #conditions
 
-#     IGNORES decoder_fc_layers - only supports linear decoder!
-#     """
+    IGNORES decoder_fc_layers - only supports linear decoder!
+    """
 
-#     def create_decoder(self):
-#         """
-#         Create decoder.
-#         """
-#         class Decoder(nn.Module):
-#             def __init__(self, config):
-#                 super(Decoder, self).__init__()
-#                 self.config = config
-#                 self.fc = nn.Linear(config["latent_dim"], config["num_output_channels"] * config["encode_condition"])
-#                 self.reshape = (config["num_output_channels"], config["encode_condition"])
+    def create_decoder(self):
+        """
+        Create decoder.
+        """
+        class Decoder(nn.Module):
+            def __init__(self, config):
+                super(Decoder, self).__init__()
+                self.config = config
+                self.fc = nn.Linear(config["latent_dim"], config["num_output_channels"] * config["encode_condition"])
+                self.reshape = (config["num_output_channels"], config["encode_condition"])
 
-#             def forward(self, x, c):
-#                 x = self.fc(x)
-#                 x = x.view(-1, *self.reshape)
-#                 c = self.encode_condition(c)
-#                 decoder_output = torch.einsum('boc,bc->bo', x, c)
-#                 return decoder_output
+            def forward(self, x, c):
+                x = self.fc(x)
+                x = x.view(-1, *self.reshape)
+                c = self.encode_condition(c)
+                decoder_output = torch.einsum('boc,bc->bo', x, c)
+                return decoder_output
 
-#         return Decoder(self.config)
+        return Decoder(self.config)
 
-#     def forward(self, x, c=None):
-#         if self.is_conditional:
-#             x = torch.cat([x, c], dim=-1)
-#         x = self.encoder(x)
-#         reparam_latent = reparameterize_gumbel_softmax_torch(x, self.temperature)
-#         if self.is_adversarial:
-#             adv_output = self.adv_head(reparam_latent)
-#             return reparam_latent, adv_output
-#         return reparam_latent, x
+    def forward(self, x, c=None):
+        if self.is_conditional:
+            x = torch.cat([x, c], dim=-1)
+        x = self.encoder(x)
+        reparam_latent = reparameterize_gumbel_softmax_torch(x, self.temperature)
+        if self.is_adversarial:
+            adv_output = self.adv_head(reparam_latent)
+            return reparam_latent, adv_output
+        return reparam_latent, x
     
 
 class GMMVAEModelTorch(BaseAEModelTorch):
